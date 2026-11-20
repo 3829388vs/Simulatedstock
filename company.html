@@ -247,7 +247,7 @@
   .speed-btn:disabled { opacity: .4; cursor: not-allowed; }
 
   .project-card.ended {
-    filter: grayscale(1);
+    filter: grayscale(0.8);
     opacity: .55;
   }
   .project-card.ended .project-img-wrap img {
@@ -314,6 +314,14 @@
         {{ phase === 'trading' ? '● 开盘交易中' : '● 收盘休息中' }}
       </span>
       <span class="countdown">{{ countdownText }}</span>
+      <span v-if="company && company.loan.creditStatus === 'dishonest'"
+            class="badge" style="background:rgba(245,72,77,.15);color:#ff5c5c;border:1px solid rgba(245,72,77,.35)">
+        ⚠ 失信企业（{{ dishonestRemainDays }} 天内还清可恢复）
+      </span>
+      <span v-if="company && company.loan.creditStatus === 'bankrupt'"
+            class="badge" style="background:rgba(139,148,158,.15);color:#9ca3af;border:1px solid rgba(139,148,158,.35)">
+        💀 已破产
+      </span>
       <span v-if="company">公司成立于：<b>{{ company.foundedAt }}</b></span>
     </div>
     <a class="back-link" href="https://3829388vs.github.io/Simulatedstock/index.html">← 返回炒股</a>
@@ -367,6 +375,8 @@
       <button :class="{ active: tab === 'external' }" @click="tab = 'external'">对外投资</button>
       <button :class="{ active: tab === 'properties' }" @click="tab = 'properties'">置业资产</button>
       <button :class="{ active: tab === 'products' }" @click="tab = 'products'">产品研发</button>
+      <button :class="{ active: tab === 'acquisitions' }" @click="tab = 'acquisitions'">企业收购</button>
+      <button :class="{ active: tab === 'subsidiaries' }" @click="tab = 'subsidiaries'">子公司</button>
     </nav>
 
     <!-- ============ 公司概况 ============ -->
@@ -379,8 +389,11 @@
         </div>
         <div class="stat">
           <div class="label">负债总额</div>
-          <div class="value" :class="company.loan.balance > 0 ? 'down' : 'flat'">{{ fmtBig(company.loan.balance) }}</div>
-          <div class="sub">年利率 8%（按日计息）</div>
+          <div class="value" :class="totalLiabilitiesYuan > 0 ? 'down' : 'flat'">{{ fmtBig(totalLiabilitiesYuan) }}</div>
+          <div class="sub">
+            母公司 {{ fmtBig(company.loan.balance) }}
+            <span v-if="acquisitionLiabilitiesYuan > 0"> · 子公司 {{ fmtBig(acquisitionLiabilitiesYuan) }}</span>
+          </div>
         </div>
         <div class="stat">
           <div class="label">应收账款</div>
@@ -498,7 +511,11 @@
         </div>
         <div class="stat">
           <div class="label">负债总额</div>
-          <div class="value" :class="company.loan.balance > 0 ? 'down' : 'flat'">{{ fmtBig(company.loan.balance) }}</div>
+          <div class="value" :class="totalLiabilitiesYuan > 0 ? 'down' : 'flat'">{{ fmtBig(totalLiabilitiesYuan) }}</div>
+          <div class="sub">
+            母公司 {{ fmtBig(company.loan.balance) }}
+            <span v-if="acquisitionLiabilitiesYuan > 0"> · 子公司 {{ fmtBig(acquisitionLiabilitiesYuan) }}</span>
+          </div>
           <div class="sub">
             可借额度 {{ fmtBig(Math.max(0, loanLimit - company.loan.balance)) }}
             <button class="act" style="margin-left:8px;padding:3px 10px;font-size:12px"
@@ -782,7 +799,11 @@
         <div class="stat">
           <div class="label">净利润</div>
           <div class="value" :class="pnlClass(productNetProfit)">{{ fmtBigSigned(productNetProfit) }}</div>
-          <div class="sub">产品总收益 − 研发费用 − 广告费</div>
+        </div>
+        <div class="stat">
+          <div class="label">总运营费</div>
+          <div class="value down">{{ fmtBig(totalOperationFee) }}</div>
+          <div class="sub">销售中产品每周运营费累计</div>
         </div>
       </div>
 
@@ -803,6 +824,8 @@
             <div class="product-meta">投资金额：{{ p.investWan }} 万元<span v-if="p.extraInvestWan"> + {{ p.extraInvestWan }} 万</span></div>
             <div class="product-meta">研发周期：{{ p.rndDays }} 天</div>
             <div class="product-meta">本周收益：<span :class="pnlClass(p.weeklyIncome)">{{ fmtBigSigned(p.weeklyIncome) }}</span></div>
+            <div class="product-meta">本周运营费：<span class="down">{{ fmtBig(p.weeklyOperationFee || 0) }}</span></div>
+            <div class="product-meta">净利润：<span :class="pnlClass(p.totalIncome - p.totalOperationFee)">{{ fmtBigSigned(p.totalIncome - p.totalOperationFee) }}</span></div>
             <div class="product-status"
                 :class="p.status === '研发中' ? 'status-building' : 'status-profit'">
               {{ p.status }}
@@ -818,6 +841,60 @@
         <button class="speed-btn" :disabled="productPage <= 1" @click="productPage--">上一页</button>
         <span class="pager-info">{{ productPage }} / {{ totalProductPages }}</span>
         <button class="speed-btn" :disabled="productPage >= totalProductPages" @click="productPage++">下一页</button>
+      </div>
+    </section>
+    <section v-if="tab === 'acquisitions'">
+      <div class="grid-cards" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))">
+        <div v-for="c in availableAcquisitions" :key="c.id" class="project-card" @click="openAcquisitionDetail(c)">
+          <div class="project-img-wrap">
+            <img :src="c.img" :alt="c.name" @error="$event.target.style.display='none'">
+            <span class="project-type-tag">{{ c.industry }}</span>
+          </div>
+          <div class="project-body">
+            <div class="project-name">{{ c.name }}</div>
+            <div class="project-meta">总资产：{{ c.totalAssets }} 万元 · 负债：{{ c.liabilities }} 万元</div>
+            <div class="project-meta">员工：{{ c.employees }} 人 · 平均月净利：{{ c.averNetProfit }} 万元</div>
+            <div class="project-detail-line">{{ c.mainProducts }}</div>
+            <div class="project-income-row">
+              <span>收购价：<b>{{ fmtBig((c.totalAssets*1.8-c.liabilities*0.5)*10000) }}元</b></span>
+            </div>
+          </div>
+        </div>
+        <div v-if="availableAcquisitions.length === 0" class="empty" style="grid-column:1/-1">
+          暂无可收购企业
+        </div>
+      </div>
+    </section>
+    <section v-if="tab === 'subsidiaries'">
+      <div class="stats" style="margin-bottom:14px">
+        <div class="stat">
+          <div class="label">子公司数量</div>
+          <div class="value">{{ acquisitionList.length }}</div>
+        </div>
+        <div class="stat">
+          <div class="label">子公司上周盈利合计</div>
+          <div class="value" :class="pnlClass(acquisitionRevenueWeekly)">{{ fmtBigSigned(acquisitionRevenueWeekly * 10000) }}</div>
+        </div>
+      </div>
+
+      <div class="grid-cards" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))">
+        <div v-for="s in acquisitionList" :key="s.id" class="project-card" @click="openSubsidiaryDetail(s)">
+          <div class="project-img-wrap">
+            <img :src="s.img" :alt="s.name" @error="$event.target.style.display='none'">
+            <span class="project-type-tag">{{ s.industry }}</span>
+          </div>
+          <div class="project-body">
+            <div class="project-name">{{ s.name }}</div>
+            <div class="project-meta">净资产：{{ s.currentAssets }} 万元 · 员工：{{ s.employees }} 人</div>
+            <div class="project-meta">上月净利润：{{ s.reports.length ? s.reports[s.reports.length - 1].profit : 0 }} 万元</div>
+            <div class="project-income-row">
+              <span>上周盈利：<b :class="pnlClass(s.weeklyIncome)">{{ s.weeklyIncome }} 万元</b></span>
+            </div>
+          </div>
+        </div>
+        <div v-if="acquisitionList.length === 0" class="empty" style="grid-column:1/-1">
+          暂无子公司，去「企业收购」看看吧
+        </div>
       </div>
     </section>
   </template>
@@ -935,7 +1012,7 @@
   <div v-if="loanModal === 'repay'" class="modal-mask" @click.self="loanModal = null">
     <div class="modal">
       <h3>偿还借款</h3>
-      <div class="row"><span>负债总额</span><span>{{ fmtBig(company.loan.balance) }}</span></div>
+      <div class="row"><span>本公司负债总额</span><span>{{ fmtBig(company.loan.balance) }}</span></div>
       <div class="row"><span>可用现金</span><span>{{ fmtBig(account.cash) }}</span></div>
       <div class="form-item" style="margin-top:14px">
         <label>还款金额（元）</label>
@@ -943,6 +1020,7 @@
       </div>
       <div class="modal-actions">
         <button class="btn-ghost" @click="loanModal = null">取消</button>
+        <button class="btn-ghost" @click="loanAmount = company.loan.balance">全部偿还</button>
         <button class="act" @click="confirmRepay">确认还款</button>
       </div>
     </div>
@@ -1080,6 +1158,7 @@
         <div class="row"><span>建筑成本</span><span>{{ fmtBig(propertyBuildingCost) }}</span></div>
         <div class="row"><span>总造价成本</span><span style="color:#e6edf3;font-weight:700">{{ fmtBig(propertyTotalCost) }}</span></div>
         <div class="row"><span>建造所需时间</span><span>{{ propertyBuildDays }} 天</span></div>
+        <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">招募生产工和项目经理能提升工期速度</div>
       </div>
 
       <div class="modal-actions">
@@ -1242,6 +1321,7 @@
 
     <div class="property-calc-box">
       <div class="row"><span>预计研发周期</span><span>{{ productFormRndDays }} 天</span></div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">招募研发工程师和项目经理能缩短研发时间</div>
       <div class="row"><span>研发投入</span><span>{{ fmtBig((Number(productForm.investWan) || 0) * 10000) }}</span></div>
     </div>
 
@@ -1261,9 +1341,14 @@
       <div class="row"><span>研发投入</span><span>{{ fmtBig((productDetail.investWan || 0) * 10000) }}</span></div>
       <div class="row" v-if="productDetail.extraInvestWan"><span>追加投资</span><span>{{ productDetail.extraInvestWan }} 万元</span></div>
       <div class="row"><span>广告投入</span><span>{{ productDetail.adFeeWan || 0 }} 万元</span></div>
+      <div class="row"><span>本周运营费</span><span class="down">{{ fmtBig(productDetail.weeklyOperationFee || 0) }}</span></div>
+      <div class="row"><span>累计运营费</span><span class="down">{{ fmtBig(productDetail.totalOperationFee || 0) }}</span></div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">每招募1位【运营】员工，减少运营成本8%</div>
       <div class="row"><span>状态</span><span>{{ productDetail.status }}</span></div>
       <div class="row"><span>本周收益</span><span :class="pnlClass(productDetail.weeklyIncome)">{{ fmtBigSigned(productDetail.weeklyIncome) }}</span></div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">招募【销售】或【生产工】或【产品经理】员工，收益增加。销售>生产工和产品经理</div>
       <div class="row"><span>总收益</span><span :class="pnlClass(productDetail.totalIncome)">{{ fmtBigSigned(productDetail.totalIncome) }}</span></div>
+      <div class="row"><span>净利润</span><span :class="pnlClass(productDetail.totalIncome)">{{ fmtBigSigned(productDetail.totalIncome - productDetail.totalOperationFee) }}</span></div>
 
       <template v-if="productDetail.status === '销售中'">
         <div class="form-item" style="margin-top:14px">
@@ -1294,7 +1379,78 @@
       </div>
     </div>
   </div>
+  <div v-if="acquisitionDetail" class="modal-mask" @click.self="acquisitionDetail = null">
+    <div class="modal" style="max-width:560px">
+      <div class="project-detail-img">
+        <img :src="acquisitionDetail.img" :alt="acquisitionDetail.name" @error="$event.target.style.display='none'">
+      </div>
+      <h3>{{ acquisitionDetail.name }}</h3>
+      <div class="row"><span>行业</span><span>{{ acquisitionDetail.industry }}</span></div>
+      <div class="row"><span>主营产品</span><span style="text-align:right;max-width:60%">{{ acquisitionDetail.mainProducts }}</span></div>
+      <div class="row"><span>地址</span><span style="text-align:right;max-width:60%">{{ acquisitionDetail.address }}</span></div>
+      <div class="row"><span>总资产</span><span>{{ acquisitionDetail.totalAssets }} 万元</span></div>
+      <div class="row"><span>负债</span><span>{{ acquisitionDetail.liabilities }} 万元</span></div>
+      <div class="row"><span>员工总数</span><span>{{ acquisitionDetail.employees }} 人</span></div>
+      <div class="row"><span>平均月净利润</span><span>{{ acquisitionDetail.averNetProfit }} 万元</span></div>
+      <div class="row" style="margin-top:10px;border-top:1px solid #21262d;padding-top:10px">
+        <span>收购所需金额</span>
+        <span style="color:#e6edf3;font-weight:700">{{ fmtBig((acquisitionDetail.totalAssets * 1.8 - acquisitionDetail.liabilities*0.5) * 10000) }}元</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" @click="acquisitionDetail = null">取消</button>
+        <button class="act" @click="buyCompany(acquisitionDetail)">收购</button>
+      </div>
+    </div>
+  </div>
+  <div v-if="subsidiaryDetail" class="modal-mask" @click.self="subsidiaryDetail = null">
+    <div class="modal" style="max-width:620px">
+      <div class="project-detail-img">
+        <img :src="subsidiaryDetail.img" :alt="subsidiaryDetail.name" @error="$event.target.style.display='none'">
+      </div>
+      <h3>{{ subsidiaryDetail.name }}</h3>
+      <div class="row"><span>行业</span><span>{{ subsidiaryDetail.industry }}</span></div>
+      <div class="row"><span>主营产品</span><span style="text-align:right;max-width:60%">{{ subsidiaryDetail.mainProducts }}</span></div>
+      <div class="row"><span>地址</span><span style="text-align:right;max-width:60%">{{ subsidiaryDetail.address }}</span></div>
+      <div class="row"><span>收购时间</span><span>{{ subsidiaryDetail.acquiredAt }}</span></div>
+      <div class="row"><span>员工总数</span><span>{{ subsidiaryDetail.employees }} 人</span></div>
+      <div class="row"><span>当前净资产</span><span>{{ subsidiaryDetail.currentAssets }} 万元</span></div>
+      <div class="row"><span>剩余负债（并入母公司）</span><span>{{ subsidiaryDetail.liabilitiesRemaining }} 万元</span></div>
+      <div class="row"><span>上周盈利</span><span :class="pnlClass(subsidiaryDetail.weeklyIncome)">{{ subsidiaryDetail.weeklyIncome }} 万元</span></div>
+      <div v-if="subsidiaryDetail.liabilitiesRemaining > 0" style="margin-top:14px">
+        <div class="form-item">
+          <label>偿还子公司负债（万元，剩余 {{ subsidiaryDetail.liabilitiesRemaining }} 万元）</label>
+          <input v-model.number="subRepayInput" type="number" min="0" step="1"
+                style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+        </div>
+        <button class="act" style="width:100%" @click="repaySubsidiary">偿还负债</button>
+      </div>
+      <div style="margin-top:14px;font-size:13px;color:#8b949e">子公司财报</div>
+      <div class="table-wrap" style="margin-top:8px">
+        <table>
+          <thead>
+            <tr><th>月份</th><th>净资产</th><th>月收入</th><th>支出成本</th><th>月净利润</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in [...subsidiaryDetail.reports].reverse()" :key="r.month">
+              <td>{{ formatMonthLabel(r.month) }}</td>
+              <td class="num">{{ r.netAssets }} 万</td>
+              <td class="num">{{ r.revenue }} 万</td>
+              <td class="num">{{ r.cost }} 万</td>
+              <td class="num" :class="pnlClass(r.profit)">{{ r.profit }} 万</td>
+            </tr>
+            <tr v-if="subsidiaryDetail.reports.length === 0">
+              <td colspan="5" class="empty">暂无报表，每月 1 号生成</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn-ghost" @click="subsidiaryDetail = null">关闭</button>
+        <button class="act sell" @click="transferCompany(subsidiaryDetail)">转让</button>
+      </div>
+    </div>
+  </div>
   <transition name="fade">
     <div class="toast" v-if="toast">{{ toast }}</div>
   </transition>
@@ -1513,6 +1669,728 @@ const projectList = [
     details: "黄阁建材家具厂是本地的老型企业，开业23年。"
   },
 ];
+const companyList = [
+  {
+    id: 1,
+    name: "蓝科信息",
+    totalAssets: 762,
+    liabilities: 597,
+    industry: "计算机",
+    mainProducts: "计算机软件、计算机硬件销售，计算机服务",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 351,
+    employees: 107,
+    address: "深圳市宝安区新安街道宝源路 1 号",
+  },
+  {
+    id: 2,
+    name: "海澜之家",
+    totalAssets: 3862,
+    liabilities: 6208,
+    industry: "家具服饰",
+    mainProducts: "家具服饰、床上用品",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 926,
+    employees: 338,
+    address: "深圳市宝安区福永街道桥头社区",
+  },
+  {
+    id: 3,
+    name: "盾安环境",
+    totalAssets: 853,
+    liabilities: 331,
+    industry: "家居空调",
+    mainProducts: "空调、中央空调",
+    img: "https://www.dunan.net/picture/0/1909110949034501072.png",
+    averNetProfit: 297,
+    employees: 112,
+    address: "深圳市宝安区福永街道桥头社区",
+  },
+  {
+    id: 4,
+    name: "极兔物流",
+    totalAssets: 3200,
+    liabilities: 1800,
+    industry: "物流运输",
+    mainProducts: "同城配送、跨境货运",
+    img: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&h=300&fit=crop",
+    averNetProfit: 400,
+    employees: 1200,
+    address: "上海市浦东新区物流园"
+  },
+  {
+    id: 5,
+    name: "康健医药",
+    totalAssets: 2500,
+    liabilities: 1000,
+    industry: "生物医药",
+    mainProducts: "处方药、保健品研发",
+    img: "https://images.unsplash.com/photo-1584362917165-526a968579e8?w=600&h=300&fit=crop",
+    averNetProfit: 350,
+    employees: 320,
+    address: "苏州市工业园区生物巷"
+  },
+  {
+    id: 6,
+    name: "星光传媒",
+    totalAssets: 600,
+    liabilities: 150,
+    industry: "广告传媒",
+    mainProducts: "品牌策划、数字营销",
+    img: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=600&h=300&fit=crop",
+    averNetProfit: 80,
+    employees: 45,
+    address: "北京市朝阳区CBD中心"
+  },
+  {
+    id: 7,
+    name: "精工电子",
+    totalAssets: 4500,
+    liabilities: 2800,
+    industry: "电子元器件",
+    mainProducts: "芯片封装、传感器",
+    img: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&h=300&fit=crop",
+    averNetProfit: 550,
+    employees: 980,
+    address: "无锡市高新区微电子园"
+  },
+  {
+    id: 8,
+    name: "悦享酒店",
+    totalAssets: 1800,
+    liabilities: 900,
+    industry: "酒店管理",
+    mainProducts: "连锁酒店运营、餐饮服务",
+    img: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&h=300&fit=crop",
+    averNetProfit: 220,
+    employees: 450,
+    address: "杭州市西湖区景区旁"
+  },
+  {
+    id: 9,
+    name: "未来教育",
+    totalAssets: 950,
+    liabilities: 300,
+    industry: "教育培训",
+    mainProducts: "K12辅导、职业技能培训",
+    img: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=600&h=300&fit=crop",
+    averNetProfit: 120,
+    employees: 180,
+    address: "武汉市洪山区高校区"
+  },
+  {
+    id: 10,
+    name: "蓝海能源",
+    totalAssets: 8000,
+    liabilities: 4500,
+    industry: "新能源",
+    mainProducts: "太阳能电池板、储能设备",
+    img: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&h=300&fit=crop",
+    averNetProfit: 900,
+    employees: 1500,
+    address: "合肥市高新区光伏路"
+  },
+  {
+    id: 11,
+    name: "智行汽车",
+    totalAssets: 6500,
+    liabilities: 4000,
+    industry: "新能源汽车",
+    mainProducts: "电动轿车、智能驾驶系统",
+    img: "https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=600&h=300&fit=crop",
+    averNetProfit: 750,
+    employees: 2200,
+    address: "上海市嘉定区汽车城"
+  },
+  {
+    id: 12,
+    name: "味全食品",
+    totalAssets: 1500,
+    liabilities: 600,
+    industry: "食品加工",
+    mainProducts: "休闲零食、饮料生产",
+    img: "https://images.unsplash.com/photo-1505253716362-afaea1d3d1af?w=600&h=300&fit=crop",
+    averNetProfit: 180,
+    employees: 300,
+    address: "成都市温江区食品工业园"
+  },
+  {
+    id: 13,
+    name: "安居地产",
+    totalAssets: 12000,
+    liabilities: 8000,
+    industry: "房地产开发",
+    mainProducts: "住宅开发、商业地产运营",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 1500,
+    employees: 650,
+    address: "广州市天河区珠江新城"
+  },
+  {
+    id: 14,
+    name: "锐捷网络",
+    totalAssets: 2200,
+    liabilities: 1100,
+    industry: "通信设备",
+    mainProducts: "路由器、交换机、网络安全",
+    img: "https://images.unsplash.com/photo-1544197150-b99a580bbcbf?w=600&h=300&fit=crop",
+    averNetProfit: 300,
+    employees: 420,
+    address: "福州市仓山区科技园"
+  },
+  {
+    id: 15,
+    name: "时尚服饰",
+    totalAssets: 1100,
+    liabilities: 500,
+    industry: "服装零售",
+    mainProducts: "快时尚女装、配饰",
+    img: "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&h=300&fit=crop",
+    averNetProfit: 130,
+    employees: 210,
+    address: "杭州市余杭区电商园"
+  },
+  {
+    id: 16,
+    name: "深蓝化工",
+    totalAssets: 3800,
+    liabilities: 2000,
+    industry: "化学原料",
+    mainProducts: "工业溶剂、新型材料",
+    img: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=600&h=300&fit=crop",
+    averNetProfit: 450,
+    employees: 550,
+    address: "南京市江北新区化工园"
+  },
+  {
+    id: 17,
+    name: "优家家居",
+    totalAssets: 900,
+    liabilities: 300,
+    industry: "家具制造",
+    mainProducts: "实木家具、智能家居",
+    img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&h=300&fit=crop",
+    averNetProfit: 100,
+    employees: 120,
+    address: "佛山市顺德区家具城"
+  },
+  {
+    id: 18,
+    name: "金盾安防",
+    totalAssets: 1600,
+    liabilities: 700,
+    industry: "安全监控",
+    mainProducts: "监控摄像头、门禁系统",
+    img: "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=600&h=300&fit=crop",
+    averNetProfit: 200,
+    employees: 280,
+    address: "深圳市龙岗区安防产业园"
+  },
+  {
+    id: 19,
+    name: "畅游旅游",
+    totalAssets: 750,
+    liabilities: 250,
+    industry: "旅行社",
+    mainProducts: "出境游、国内定制团",
+    img: "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&h=300&fit=crop",
+    averNetProfit: 90,
+    employees: 85,
+    address: "昆明市官渡区机场附近"
+  },
+  {
+    id: 20,
+    name: "博雅出版",
+    totalAssets: 500,
+    liabilities: 100,
+    industry: "文化传媒",
+    mainProducts: "图书出版、电子刊物",
+    img: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=600&h=300&fit=crop",
+    averNetProfit: 60,
+    employees: 55,
+    address: "北京市东城区出版大厦"
+  },
+  {
+    id: 21,
+    name: "天翼航空",
+    totalAssets: 9500,
+    liabilities: 6000,
+    industry: "航空运输",
+    mainProducts: "客运航班、货运包机",
+    img: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&h=300&fit=crop",
+    averNetProfit: 1100,
+    employees: 3500,
+    address: "上海市浦东新区国际机场"
+  },
+  {
+    id: 22,
+    name: "惠民超市",
+    totalAssets: 2800,
+    liabilities: 1500,
+    industry: "零售百货",
+    mainProducts: "生鲜食品、日用百货",
+    img: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&h=300&fit=crop",
+    averNetProfit: 320,
+    employees: 900,
+    address: "长沙市岳麓区商业中心"
+  },
+  {
+    id: 23,
+    name: "创想游戏",
+    totalAssets: 1300,
+    liabilities: 400,
+    industry: "网络游戏",
+    mainProducts: "手机游戏、PC端游",
+    img: "https://images.unsplash.com/photo-1552820728-8b83bb6b773f?w=600&h=300&fit=crop",
+    averNetProfit: 180,
+    employees: 220,
+    address: "成都市高新区天府软件园"
+  },
+  {
+    id: 24,
+    name: "恒通建材",
+    totalAssets: 3100,
+    liabilities: 1900,
+    industry: "建筑材料",
+    mainProducts: "水泥、钢材、玻璃",
+    img: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&h=300&fit=crop",
+    averNetProfit: 380,
+    employees: 480,
+    address: "唐山市路北区工业园"
+  },
+  {
+    id: 25,
+    name: "美妍化妆品",
+    totalAssets: 1050,
+    liabilities: 350,
+    industry: "日化用品",
+    mainProducts: "护肤品、彩妆系列",
+    img: "https://images.unsplash.com/photo-1596462502278-27bfdd403348?w=600&h=300&fit=crop",
+    averNetProfit: 140,
+    employees: 160,
+    address: "上海市奉贤区美妆谷"
+  },
+  {
+    id: 26,
+    name: "智联招聘",
+    totalAssets: 1800,
+    liabilities: 600,
+    industry: "人力资源",
+    mainProducts: "在线招聘、猎头服务",
+    img: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=600&h=300&fit=crop",
+    averNetProfit: 230,
+    employees: 310,
+    address: "北京市朝阳区望京SOHO"
+  },
+  {
+    id: 27,
+    name: "极地探险",
+    totalAssets: 650,
+    liabilities: 200,
+    industry: "户外运动",
+    mainProducts: "户外装备、探险旅游",
+    img: "https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=600&h=300&fit=crop",
+    averNetProfit: 75,
+    employees: 70,
+    address: "哈尔滨市松北区冰雪大世界"
+  },
+  {
+    id: 28,
+    name: "银发养老",
+    totalAssets: 2100,
+    liabilities: 800,
+    industry: "养老服务",
+    mainProducts: "养老院运营、居家护理",
+    img: "https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?w=600&h=300&fit=crop",
+    averNetProfit: 260,
+    employees: 520,
+    address: "苏州市吴中区太湖畔"
+  },
+  {
+    id: 29,
+    name: "量子计算",
+    totalAssets: 4200,
+    liabilities: 1200,
+    industry: "前沿科技",
+    mainProducts: "量子芯片、算法研究",
+    img: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&h=300&fit=crop",
+    averNetProfit: 500,
+    employees: 280,
+    address: "北京市海淀区中关村"
+  },
+  {
+    id: 30,
+    name: "环球贸易",
+    totalAssets: 5500,
+    liabilities: 3200,
+    industry: "进出口贸易",
+    mainProducts: "电子产品出口、原材料进口",
+    img: "https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=600&h=300&fit=crop",
+    averNetProfit: 650,
+    employees: 750,
+    address: "宁波市北仑区港口物流区"
+  },
+  {
+    id: 31,
+    name: "芯恒电子",
+    totalAssets: 4280,
+    liabilities: 3120,
+    industry: "电子制造",
+    mainProducts: "电子元器件、集成电路、消费电子配件",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 1085,
+    employees: 720,
+    address: "深圳市宝安区西乡街道固戍社区工业区"
+  },
+  {
+    id: 32,
+    name: "锐科机械",
+    totalAssets: 2850,
+    liabilities: 2100,
+    industry: "机械制造",
+    mainProducts: "工业机床、自动化生产线、精密机械零件",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 680,
+    employees: 410,
+    address: "深圳市宝安区沙井街道新二工业区"
+  },
+  {
+    id: 33,
+    name: "绿源食品",
+    totalAssets: 1680,
+    liabilities: 1120,
+    industry: "食品加工",
+    mainProducts: "休闲食品、速冻食品、粮油制品",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 390,
+    employees: 260,
+    address: "深圳市宝安区松岗街道东方社区"
+  },
+  {
+    id: 34,
+    name: "顺达物流",
+    totalAssets: 3560,
+    liabilities: 2890,
+    industry: "物流运输",
+    mainProducts: "城际货运、仓储服务、供应链配送",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 890,
+    employees: 680,
+    address: "深圳市宝安区福永街道怀德社区"
+  },
+  {
+    id: 35,
+    name: "康泰生物",
+    totalAssets: 5120,
+    liabilities: 3760,
+    industry: "生物医药",
+    mainProducts: "生物试剂、医用耗材、体外诊断产品",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 1260,
+    employees: 750,
+    address: "深圳市宝安区石岩街道塘头工业区"
+  },
+  {
+    id: 36,
+    name: "绿能新材",
+    totalAssets: 3970,
+    liabilities: 2980,
+    industry: "新能源材料",
+    mainProducts: "锂电池材料、光伏组件、储能设备配件",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 980,
+    employees: 650,
+    address: "深圳市宝安区新桥街道黄埔工业区"
+  },
+  {
+    id: 37,
+    name: "星辰传媒",
+    totalAssets: 980,
+    liabilities: 620,
+    industry: "文化传媒",
+    mainProducts: "广告策划、影视制作、品牌推广服务",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 240,
+    employees: 130,
+    address: "深圳市宝安区新安街道创业路"
+  },
+  {
+    id: 38,
+    name: "金盛五金",
+    totalAssets: 1250,
+    liabilities: 870,
+    industry: "五金制品",
+    mainProducts: "五金冲压件、紧固件、金属模具配件",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 310,
+    employees: 180,
+    address: "深圳市宝安区燕罗街道塘下涌社区"
+  },
+  {
+    id: 39,
+    name: "鸿达塑胶",
+    totalAssets: 890,
+    liabilities: 580,
+    industry: "塑胶制品",
+    mainProducts: "塑料外壳、注塑配件、包装塑胶制品",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 210,
+    employees: 115,
+    address: "深圳市宝安区福海街道和平社区"
+  },
+  {
+    id: 40,
+    name: "明辉光电",
+    totalAssets: 2160,
+    liabilities: 1540,
+    industry: "光电技术",
+    mainProducts: "LED光源、光学透镜、显示模组配件",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 520,
+    employees: 320,
+    address: "深圳市宝安区航城街道三围社区"
+  },
+  {
+    id: 41,
+    name: "智联自动化",
+    totalAssets: 2780,
+    liabilities: 1960,
+    industry: "自动化设备",
+    mainProducts: "工业机器人、自动化装配线、检测设备",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 690,
+    employees: 400,
+    address: "深圳市宝安区沙井街道共和工业区"
+  },
+  {
+    id: 42,
+    name: "海盈贸易",
+    totalAssets: 1520,
+    liabilities: 1080,
+    industry: "国际贸易",
+    mainProducts: "电子产品进出口、百货贸易、跨境供应链",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 370,
+    employees: 210,
+    address: "深圳市宝安区新安街道海秀路"
+  },
+  {
+    id: 43,
+    name: "博睿咨询",
+    totalAssets: 760,
+    liabilities: 420,
+    industry: "企业咨询",
+    mainProducts: "管理咨询、财务顾问、企业战略规划服务",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 185,
+    employees: 95,
+    address: "深圳市宝安区西乡街道宝民路"
+  },
+  {
+    id: 44,
+    name: "建安建设",
+    totalAssets: 4850,
+    liabilities: 3920,
+    industry: "建筑工程",
+    mainProducts: "工业厂房建设、市政工程、装饰装修工程",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 1180,
+    employees: 820,
+    address: "深圳市宝安区石岩街道石龙社区"
+  },
+  {
+    id: 45,
+    name: "碧水环保",
+    totalAssets: 1890,
+    liabilities: 1270,
+    industry: "环保科技",
+    mainProducts: "污水处理设备、废气治理方案、环保耗材",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 450,
+    employees: 240,
+    address: "深圳市宝安区松岗街道溪头社区"
+  },
+  {
+    id: 46,
+    name: "益康医疗",
+    totalAssets: 2340,
+    liabilities: 1680,
+    industry: "医疗器械",
+    mainProducts: "医用电子设备、康复器械、护理用品",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 560,
+    employees: 310,
+    address: "深圳市宝安区福永街道凤凰社区"
+  },
+  {
+    id: 47,
+    name: "威盾安防",
+    totalAssets: 1120,
+    liabilities: 760,
+    industry: "安防技术",
+    mainProducts: "监控设备、门禁系统、安防解决方案",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 280,
+    employees: 170,
+    address: "深圳市宝安区新安街道上川社区"
+  },
+  {
+    id: 48,
+    name: "精模智造",
+    totalAssets: 1750,
+    liabilities: 1190,
+    industry: "精密模具",
+    mainProducts: "塑胶模具、五金模具、模具定制加工",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 420,
+    employees: 230,
+    address: "深圳市宝安区沙井街道后亭社区"
+  },
+  {
+    id: 49,
+    name: "佳美包装",
+    totalAssets: 920,
+    liabilities: 610,
+    industry: "包装材料",
+    mainProducts: "纸质包装、塑料包装、定制礼盒包装",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 220,
+    employees: 125,
+    address: "深圳市宝安区燕罗街道山门社区"
+  },
+  {
+    id: 50,
+    name: "华彩印刷",
+    totalAssets: 850,
+    liabilities: 540,
+    industry: "印刷服务",
+    mainProducts: "书刊印刷、包装印刷、广告物料印刷",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 205,
+    employees: 108,
+    address: "深圳市宝安区福海街道新田社区"
+  },
+  {
+    id: 51,
+    name: "味享餐饮",
+    totalAssets: 680,
+    liabilities: 410,
+    industry: "餐饮管理",
+    mainProducts: "连锁餐饮运营、食材配送、餐饮品牌孵化",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 165,
+    employees: 92,
+    address: "深圳市宝安区西乡街道流塘社区"
+  },
+  {
+    id: 52,
+    name: "汇通供应链",
+    totalAssets: 3210,
+    liabilities: 2560,
+    industry: "供应链管理",
+    mainProducts: "仓储配送、供应链金融、跨境物流服务",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 780,
+    employees: 630,
+    address: "深圳市宝安区航城街道黄田社区"
+  },
+  {
+    id: 53,
+    name: "云帆软件",
+    totalAssets: 1430,
+    liabilities: 890,
+    industry: "软件服务",
+    mainProducts: "企业管理系统、SaaS平台、软件开发服务",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 350,
+    employees: 200,
+    address: "深圳市宝安区新安街道兴东社区"
+  },
+  {
+    id: 54,
+    name: "智联智能",
+    totalAssets: 2050,
+    liabilities: 1420,
+    industry: "智能硬件",
+    mainProducts: "智能终端、物联网设备、智能家居产品",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 490,
+    employees: 290,
+    address: "深圳市宝安区石岩街道官田社区"
+  },
+  {
+    id: 55,
+    name: "中测检测",
+    totalAssets: 1180,
+    liabilities: 790,
+    industry: "检测技术",
+    mainProducts: "产品质量检测、环境检测、认证咨询服务",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 290,
+    employees: 160,
+    address: "深圳市宝安区松岗街道楼岗社区"
+  },
+  {
+    id: 56,
+    name: "天工新材",
+    totalAssets: 2670,
+    liabilities: 1850,
+    industry: "新材料",
+    mainProducts: "高性能陶瓷、纳米材料、复合功能材料",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 640,
+    employees: 380,
+    address: "深圳市宝安区新桥街道万丰社区"
+  },
+  {
+    id: 57,
+    name: "科仪精密",
+    totalAssets: 1960,
+    liabilities: 1320,
+    industry: "精密仪器",
+    mainProducts: "测量仪器、光学仪器、实验室分析设备",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 470,
+    employees: 270,
+    address: "深圳市宝安区福永街道塘尾社区"
+  },
+  {
+    id: 58,
+    name: "锦绣纺织",
+    totalAssets: 1580,
+    liabilities: 1050,
+    industry: "纺织服装",
+    mainProducts: "纺织面料、服装辅料、成衣加工",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 380,
+    employees: 220,
+    address: "深圳市宝安区沙井街道马安山社区"
+  },
+  {
+    id: 59,
+    name: "宜居家具",
+    totalAssets: 2230,
+    liabilities: 1570,
+    industry: "家具制造",
+    mainProducts: "办公家具、民用家具、定制家居产品",
+    img: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=300&fit=crop",
+    averNetProfit: 530,
+    employees: 330,
+    address: "深圳市宝安区石岩街道应人石社区"
+  },
+  {
+    id: 60,
+    name: "璀璨珠宝",
+    totalAssets: 4520,
+    liabilities: 3680,
+    industry: "珠宝首饰",
+    mainProducts: "黄金饰品、镶嵌珠宝、首饰定制加工",
+    img: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&h=300&fit=crop",
+    averNetProfit: 1120,
+    employees: 710,
+    address: "深圳市宝安区新安街道建安路"
+  }
+];
 
 const PROJECT_MAP = {};
 projectList.forEach(p => { PROJECT_MAP[p.name] = p; });
@@ -1578,14 +2456,22 @@ function productColor(type) {
 }
 
 function productRndDays(type) {
-  return ['半导体材料及芯片', '计算机软硬件', '车辆', '医疗器械'].includes(type) ? 60 : 25;
+  let needDays = ['半导体材料及芯片', '计算机软硬件', '车辆', '医疗器械'].includes(type) ? 60 : 25
+  const company = normalizeCompany(readCompany());
+  //研发工程师和项目经理能缩短研发时间
+  (company.employees || []).forEach(e => {
+    if (e.position === '研发工程师' || e.position === '项目经理') {
+      if(needDays > 9) needDays = needDays - 3
+    }
+  });
+  return needDays;
 }
 
 function calcProductWeeklyRange(prod) {
   const totalInvestWan = (Number(prod.investWan) || 0) + (Number(prod.extraInvestWan) || 0);
   const investYuan = totalInvestWan * 10000;
-  let min = investYuan / 22;
-  let max = investYuan / 12;
+  let min = investYuan / 26;
+  let max = investYuan / 13;
   const adYuan = (Number(prod.adFeeWan) || 0) * 10000;
   min += adYuan / 15;
   max += adYuan / 5;
@@ -1596,6 +2482,15 @@ function productFinishDate(prod) {
   const d = new Date(prod.investDate);
   d.setDate(d.getDate() + (prod.rndDays || 0));
   return d;
+}
+function calcSalesWinterChance(company) {
+  let chance = 0.36;
+  (company.employees || []).forEach(e => {
+    if (e.type === 'staff' && ['生产工', '销售', '运营'].includes(e.position)) {
+      chance -= 0.01;
+    }
+  });
+  return Math.max(0.17, chance);
 }
 /* 计算某物业的周收益范围（元），已包含广告加成 */
 function calcPropertyWeeklyRange(prop) {
@@ -1668,8 +2563,8 @@ const COMPANY_KEY = 'sim-stock-company-v1';
 const COMPANY_VERSION = 1;
 /* 管理人员等级表：月薪区间、日收益区间（负值允许） */
 const MANAGER_LEVELS = {
-  1: { name: '总经理',     salaryMin: 150000, salaryMax: 200000, salaryStep: 1000, incomeMin: 4000,  incomeMax: 15000 },
-  2: { name: '投资顾问',   salaryMin: 100000, salaryMax: 130000, salaryStep: 1000, incomeMin: 3000,  incomeMax: 10000 },
+  1: { name: '总经理',     salaryMin: 150000, salaryMax: 200000, salaryStep: 1000, incomeMin: 3000,  incomeMax: 13000 },
+  2: { name: '投资顾问',   salaryMin: 100000, salaryMax: 130000, salaryStep: 1000, incomeMin: 3000,  incomeMax: 9000 },
   3: { name: '投资部经理', salaryMin: 80000,  salaryMax: 100000, salaryStep: 1000, incomeMin: 2000, incomeMax: 8000  },
   4: { name: '基金经理',   salaryMin: 30000,  salaryMax: 50000,  salaryStep: 1000, incomeMin: -4000, incomeMax: 10000  },
   '法务总监':   { level: 2, legal: true  },
@@ -1801,11 +2696,24 @@ function normalizeCompany(company) {
   }
   if (!Array.isArray(company.properties)) company.properties = [];
   if (!Array.isArray(company.products)) company.products = [];
+  if (!Array.isArray(company.acquisitions)) company.acquisitions = [];
+  company.acquisitions.forEach(a => {
+    if (a.weeklyIncome == null) a.weeklyIncome = 0;
+    if (a.currentAssets == null) a.currentAssets = a.initialTotalAssets || 0;
+    if (a.liabilitiesRemaining == null) a.liabilitiesRemaining = a.initialLiabilities || 0;
+    if (a.lastWeekSettleDate == null) a.lastWeekSettleDate = a.acquiredAt || null;
+    if (a.lastMonthSettleDate == null) a.lastMonthSettleDate = a.acquiredAt || null;
+    if (!Array.isArray(a.reports)) a.reports = [];
+    if (a.monthRevenueWan == null) a.monthRevenueWan = 0;
+    if (a.totalProfitWan == null) a.totalProfitWan = 0;
+  });
     company.products.forEach(p => {
       if (p.weeklyIncome == null) p.weeklyIncome = 0;
       if (p.totalIncome == null)  p.totalIncome = 0;
       if (p.adFeeWan == null)     p.adFeeWan = 0;
       if (p.extraInvestWan == null) p.extraInvestWan = 0;
+      if (p.weeklyOperationFee == null) p.weeklyOperationFee = 0;
+      if (p.totalOperationFee == null)  p.totalOperationFee = 0;
       if (!p.status) p.status = '研发中';
       if (p.rndDays == null) p.rndDays = productRndDays(p.type);
     });
@@ -1821,6 +2729,12 @@ function normalizeCompany(company) {
   if (!company.receivables) {
     company.receivables = { balance: 0, lastCollectDate: null };
   }
+  if (!company.loan) company.loan = {};
+  if (company.loan.startDate == null)    company.loan.startDate = null;
+  if (company.loan.collectStage == null) company.loan.collectStage = 0;
+  if (company.loan.lastCollectAt == null) company.loan.lastCollectAt = null;
+  if (company.loan.dishonestAt == null)  company.loan.dishonestAt = null;
+  if (!company.loan.creditStatus)        company.loan.creditStatus = 'normal';
   if (!company.receivableConfig) {
     company.receivableConfig = { rate: 0.05, chance: 0.5 };
   }
@@ -2040,6 +2954,9 @@ createApp({
       productAdInput: 0,
       productExtraInvest: 0,
       productPage: 1,
+      acquisitionDetail: null,
+      subsidiaryDetail: null,
+      subRepayInput: 0,
     };
   },
 
@@ -2053,22 +2970,24 @@ createApp({
       return this.game ? (Number(this.game.initialCash) || 1000000) : 1000000;
     },
     totalPnl() {
-      return this.account ? this.account.totalAssets - this.initialCash : 0;
+      if (!this.account) return 0;
+      return this.account.totalAssets - (this.company?.loan?.balance || 0) - this.initialCash;
     },
     netAssets() {
       if (!this.account || !this.company) return 0;
-      return round2(this.totalAssetsWithReceivables - this.company.loan.balance);
+      return round2(this.totalAssetsWithReceivables - this.totalLiabilitiesYuan);
     },
     loanLimit() {
       const n = this.netAssets;
       if (n < 10000) return 80000;
-      if (n < 20000) return 100000;
-      if (n < 30000) return 150000;
-      if (n < 50000) return 250000;
-      if (n < 80000) return 500000;
-      if (n < 150000) return 1000000;
-      if (n < 350000) return 1500000;
-      return 2000000;
+      if (n < 20000) return 150000;
+      if (n < 30000) return 300000;
+      if (n < 50000) return 500000;
+      if (n < 80000) return 700000;
+      if (n < 150000) return 1300000;
+      if (n < 350000) return 1800000;
+      if (n < 650000) return 2300000;
+      return 5000000;
     },
     sortedReports() {
       if (!this.company || !this.company.finance.reports) return [];
@@ -2214,7 +3133,15 @@ createApp({
       const t = PROPERTY_TYPES[this.propertyForm.type];
       const base = t ? t.baseDays : 0;
       const area = Number(this.propertyForm.area) || 0;
-      return base + Math.floor(area / 100);
+      let needDays = base + Math.floor(area / 100)
+      const company = normalizeCompany(readCompany());
+      (company.employees || []).forEach(e => {
+        //生产工和项目经理能提升工期速度
+        if (e.position === '生产工' || e.position === '项目经理') {
+          if(needDays>7) needDays = needDays - 3
+        }
+      });
+      return needDays;
     },
     propertyDetailRange() {
       if (!this.propertyDetail) return { min: 0, max: 0 };
@@ -2292,11 +3219,11 @@ createApp({
       return round2((this.company?.properties || []).reduce((s, p) => s + (p.totalIncome || 0), 0));
     },
     assetPieData() {
-      const net = Math.max(0, this.netAssets);
-      const liab = Math.max(0, this.company?.loan?.balance || 0);
+      const total = Math.max(0, this.totalAssetsWithReceivables);
+      const liab = Math.max(0, this.totalLiabilitiesYuan || 0);
       const propAssets = Math.max(0, (this.company?.properties || []).reduce((s, p) => s + (p.totalCost || 0), 0));
       return [
-        { name: '净资产', value: round2(net) },
+        { name: '资产总额', value: round2(total) },
         { name: '负债', value: round2(liab) },
         { name: '置业资产', value: round2(propAssets) },
       ];
@@ -2307,14 +3234,39 @@ createApp({
         { name: '高管收益总和', value: this.managerTotalIncome },
         { name: '股票投资收益', value: this.stockTotalProfit },
         { name: '置业资产收益', value: this.propertyTotalIncome },
-        { name: '产品收入',     value: this.totalProductIncome },
+        { name: '产品净利润', value: this.productNetProfit },
       ];
     },
     companyReceivables() {
       return round2(this.company?.receivables?.balance || 0);
     },
     totalAssetsWithReceivables() {
+      // const acquisitionYuan = this.acquisitionAssetsYuan;
       return round2((this.account?.totalAssets || 0) + this.companyReceivables);
+    },
+    availableAcquisitions() {
+      if (!this.company) return companyList;
+      const owned = new Set((this.company.acquisitions || []).map(a => a.id));
+      return companyList.filter(c => !owned.has(c.id));
+    },
+    acquisitionRevenueWeekly() {
+      return round2((this.company?.acquisitions || []).reduce((s, a) => s + (a.weeklyIncome || 0), 0));
+    },
+    acquisitionList() {
+      return this.company ? (this.company.acquisitions || []) : [];
+    },
+    acquisitionAssetsYuan() {
+      if (!this.company) return 0;
+      const wan = (this.company.acquisitions || []).reduce((s, a) => s + (a.currentAssets || 0), 0);
+      return round2(wan * 10000);
+    },
+    acquisitionLiabilitiesYuan() {
+      if (!this.company) return 0;
+      const wan = (this.company.acquisitions || []).reduce((s, a) => s + (a.liabilitiesRemaining || 0), 0);
+      return round2(wan * 10000);
+    },
+    totalLiabilitiesYuan() {
+      return round2((this.company?.loan?.balance || 0) + this.acquisitionLiabilitiesYuan);
     },
     receivableRate() {
       if (!this.company) return 0.05;
@@ -2351,7 +3303,8 @@ createApp({
       const totalRndCost = list.reduce((s, p) =>
         s + ((Number(p.investWan) || 0) + (Number(p.extraInvestWan) || 0)) * 10000, 0);
       const totalAdCost = list.reduce((s, p) => s + (Number(p.adFeeWan) || 0) * 10000, 0);
-      return round2(totalIncome - totalRndCost - totalAdCost);
+      const totalOpCost = list.reduce((s, p) => s + (p.totalOperationFee || 0), 0);
+      return round2(totalIncome - totalRndCost - totalAdCost - totalOpCost);
     },
     productFormRndDays() {
       return productRndDays(this.productForm.type);
@@ -2361,6 +3314,26 @@ createApp({
       return calcProductWeeklyRange(this.productDetail);
     },
     PRODUCT_TYPES_LIST() { return PRODUCT_TYPES_LIST; },
+    dishonestRemainDays() {
+      if (!this.company?.loan || this.company.loan.creditStatus !== 'dishonest') return 0;
+      if (!this.company.loan.dishonestAt) return 0;
+      const dh = new Date(this.company.loan.dishonestAt);
+      const now = new Date(this.game.currentDate);
+      return Math.max(0, 60 - dayDiff(dh, now));
+    },
+    totalOperationFee() {
+      return round2(this.productList.reduce((s, p) => s + (p.totalOperationFee || 0), 0));
+    },
+    salesWinterChance() {
+      if (!this.company) return 0.36;
+      let chance = 0.36;
+      (this.company.employees || []).forEach(e => {
+        if (e.type === 'staff' && ['生产工', '销售', '运营'].includes(e.position)) {
+          chance -= 0.01;
+        }
+      });
+      return Math.max(0.15, chance);
+    },
   },
   watch: {
     tab(val) {
@@ -2379,6 +3352,7 @@ createApp({
     },
   },
   mounted() {
+    this.checkAway();
     this.refresh();
     this.startClock();
 
@@ -2614,10 +3588,12 @@ createApp({
 
         if (company) {
           if (this.accrueInterest(company, game))        companyDirty = true;
+          if (this.settleLoanCollection(company, game)) { companyDirty = true; }
           if (this.settleManagerIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleProjectIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settlePropertyIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleProductIncome(company, game)) { companyDirty = true; gameDirty = true; }
+          if (this.settleAcquisitions(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleReceivables(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleTeamBuild(company, game))    { companyDirty = true; gameDirty = true; }
           if (this.settleMonths(company, game))       { companyDirty = true; gameDirty = true; }
@@ -2658,6 +3634,77 @@ createApp({
         }
         loan.lastInterestDate = fmtDate(currentDate);
         return true;
+    },
+    settleLoanCollection(company, game) {
+      const loan = company.loan;
+      const currentDate = new Date(game.currentDate);
+      const currentStr = fmtDate(currentDate);
+
+      if (loan.creditStatus === 'bankrupt') return false;
+
+      // 无借款 / 已还清
+      if (!loan.balance || loan.balance <= 0) {
+        let dirty = false;
+        if (loan.startDate)     { loan.startDate = null; dirty = true; }
+        if (loan.collectStage)  { loan.collectStage = 0; dirty = true; }
+        if (loan.lastCollectAt) { loan.lastCollectAt = null; dirty = true; }
+        if (loan.dishonestAt)   { loan.dishonestAt = null; dirty = true; }
+        if (loan.creditStatus === 'dishonest') {
+          loan.creditStatus = 'normal';
+          this._pendingNotices.push('公司已还清欠款，企业信用已恢复');
+          dirty = true;
+        }
+        return dirty;
+      }
+
+      if (!loan.startDate) { loan.startDate = currentStr; return true; }
+      const start = new Date(loan.startDate);
+      if (isNaN(start.getTime())) { loan.startDate = currentStr; return true; }
+
+      const days = dayDiff(start, currentDate);
+
+      // 失信状态：2 个月恢复期
+      if (loan.creditStatus === 'dishonest') {
+        const dh = new Date(loan.dishonestAt);
+        if (isNaN(dh.getTime())) { loan.dishonestAt = currentStr; return true; }
+        if (dayDiff(dh, currentDate) >= 60) {
+          loan.creditStatus = 'bankrupt';
+          this._pendingNotices.push('失信期超过 2 个月仍未还清欠款，公司正式宣布破产');
+          return true;
+        }
+        return false;
+      }
+
+      // 普通催收流程：90 / 120 / 150 / 180 天
+      let dirty = false;
+      if (days >= 180 && loan.collectStage < 4) {
+        loan.collectStage = 4;
+        loan.creditStatus = 'dishonest';
+        loan.dishonestAt = currentStr;
+        const empCount = (company.employees || []).length;
+        company.employees = [];
+        (company.departments || []).forEach(d => { d.members = []; });
+        (company.investments || []).forEach(inv => { inv.assignedEmployees = []; });
+        this._pendingNotices.push('借款逾期 6 个月，公司被列为失信企业！2 个月内未还清将宣布破产。');
+        if (empCount > 0) this._pendingNotices.push(`因公司失信，${empCount} 名员工/高管已全部离职`);
+        dirty = true;
+      } else if (days >= 150 && loan.collectStage < 3) {
+        loan.collectStage = 3;
+        loan.lastCollectAt = currentStr;
+        this._pendingNotices.push('最后通牒：借款已逾期 5 个月，若 1 个月内仍未还清，公司将被列为失信企业！');
+        dirty = true;
+      } else if (days >= 120 && loan.collectStage < 2) {
+        loan.collectStage = 2;
+        loan.lastCollectAt = currentStr;
+        this._pendingNotices.push('银行第二次催收：借款已逾期 4 个月，请尽快还清欠款。');
+        dirty = true;
+      } else if (days >= 90 && loan.collectStage < 1) {
+        loan.collectStage = 1;
+        loan.lastCollectAt = currentStr;
+        this._pendingNotices.push('银行催收：借款已逾期 3 个月，请尽快还清欠款。');
+        dirty = true;
+      }
+      return dirty;
     },
       /** 按日结算高管投资收益：跨越 N 天就补算 N 天，收益直接加到 game.cash */
       settleManagerIncome(company, game) {
@@ -2847,8 +3894,10 @@ createApp({
 
         return changed;
       },
+      //产品收入
       settleProductIncome(company, game) {
         const currentDate = new Date(game.currentDate);
+        const winterChance = calcSalesWinterChance(company);
         let changed = false;
 
         (company.products || []).forEach(prod => {
@@ -2871,13 +3920,133 @@ createApp({
           }
 
           while (dayDiff(lastSettle, currentDate) >= 7) {
+            // 产品运营费：研发费用 × 2%~3%
+            const rndCost = (Number(prod.investWan) || 0) * 10000;
+            const opFee = Math.round(rndCost * rand(0.02, 0.03));
+            let yunyinNum = 0
+              company.employees.forEach(e => {
+                if (e.position === '运营' && yunyinNum < 8) {
+                  yunyinNum += 1
+                }
+              });
+            let opFee2 = round2(opFee * (1 - 0.08 * yunyinNum))
+            game.cash = round2((Number(game.cash) || 0) - opFee2);
+            prod.weeklyOperationFee = opFee;
+            prod.totalOperationFee = round2((prod.totalOperationFee || 0) + opFee);
+
+            // 收益
             const range = calcProductWeeklyRange(prod);
-            const amount = round2(rand(range.min, range.max));
+            let amount = rand(range.min, range.max);
+            //招募销售和生产工，产品收益增加
+            let staffnum = 0
+            company.employees.forEach(e => {
+              if (e.position === '销售') {
+                if(staffnum < 30) staffnum += 2
+              }
+              if(e.position === '生产工'){
+                if(staffnum < 30) staffnum += 1
+              }
+              if(e.position === '产品经理'){
+                if(staffnum < 30) staffnum += 1
+              }
+            });
+            //产品收益增加，最多2.2倍
+            amount = amount * (1+staffnum*0.04)
+            // 销售寒冬：命中后收入 ×0.4
+            if (Math.random() < winterChance) amount *= 0.4;
+            
+            amount = round2(amount);
             prod.weeklyIncome = amount;
             prod.totalIncome = round2((prod.totalIncome || 0) + amount);
             game.cash = round2((Number(game.cash) || 0) + amount);
+
             lastSettle.setDate(lastSettle.getDate() + 7);
             prod.lastSettleDate = fmtDate(lastSettle);
+            changed = true;
+          }
+        });
+
+        return changed;
+      },
+      settleAcquisitions(company, game) {
+        const currentDate = new Date(game.currentDate);
+        const currentStr = fmtDate(currentDate);
+        let changed = false;
+
+        const managers = (company.employees || []).filter(e => e.type === 'manager');
+        const gmCount = managers.filter(e => e.role === '总经理').length;
+        const engineerCount = (company.employees || []).filter(
+          e => e.type === 'staff' && ['前端工程师', '后端工程师'].includes(e.position)
+        ).length;
+
+        (company.acquisitions || []).forEach(sub => {
+          const acquired = new Date(sub.acquiredAt);
+          if (isNaN(acquired.getTime())) return;
+
+          // ---------- 每周盈利 ----------
+          if (!sub.lastWeekSettleDate) sub.lastWeekSettleDate = sub.acquiredAt;
+          let lastWeek = new Date(sub.lastWeekSettleDate);
+          if (isNaN(lastWeek.getTime())) lastWeek = acquired;
+
+          while (dayDiff(lastWeek, currentDate) >= 7) {
+            const baseMin = (sub.averNetProfit || 0) * 0.1;
+            const baseMax = (sub.averNetProfit || 0) * 0.4;
+            let minWan = baseMin + gmCount * 0.5 + engineerCount * 0.2;
+            let maxWan = baseMax + gmCount * 2.8 + engineerCount * 0.8;
+            if (minWan > maxWan) { const t = minWan; minWan = maxWan; maxWan = t; }
+
+            let income = rand(minWan, maxWan);
+            if (Math.random() < 0.3) income *= 0.5;   // 困难期
+            income = round2(income);
+
+            sub.weeklyIncome = income;
+            sub.monthRevenueWan = round2((sub.monthRevenueWan || 0) + income);
+            sub.totalProfitWan = round2((sub.totalProfitWan || 0) + income);
+
+            lastWeek.setDate(lastWeek.getDate() + 7);
+            sub.lastWeekSettleDate = fmtDate(lastWeek);
+            changed = true;
+          }
+
+          // ---------- 每月报表 ----------
+          if (!sub.lastMonthSettleDate) sub.lastMonthSettleDate = sub.acquiredAt;
+          let lastMonth = new Date(sub.lastMonthSettleDate);
+          if (isNaN(lastMonth.getTime())) lastMonth = acquired;
+
+          while (true) {
+            const nextMonthStart = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 1);
+            if (currentDate < nextMonthStart) break;
+
+            const monthEnd = new Date(nextMonthStart.getTime() - 86400000);
+            if (monthEnd < acquired) {
+              lastMonth = nextMonthStart;
+              sub.lastMonthSettleDate = fmtDate(lastMonth);
+              continue;
+            }
+
+            const revenue = round2(sub.monthRevenueWan || 0);
+            const empCount = sub.employees || 0;
+            const perSalaryWan = 1 + (sub.initialTotalAssets || 0) * 0.001;
+            const salaryWan = round2(empCount * perSalaryWan);
+            //子公司营业成本
+            const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.3));
+            const costWan = round2(salaryWan + opCostWan);
+            const profitWan = round2(revenue - costWan);
+
+            sub.currentAssets = round2((sub.currentAssets || sub.initialTotalAssets || 0) + profitWan);
+            game.cash = round2((Number(game.cash) || 0) + profitWan * 10000);
+
+            sub.reports.push({
+              month: fmtMonth(monthEnd),
+              netAssets: sub.currentAssets,
+              revenue,
+              cost: costWan,
+              profit: profitWan,
+            });
+
+            sub.monthRevenueWan = 0;
+            lastMonth = nextMonthStart;
+            sub.lastMonthSettleDate = fmtDate(lastMonth);
             changed = true;
           }
         });
@@ -3082,6 +4251,109 @@ createApp({
       }
       return changed;
     },
+    checkAway() {
+      const game = readGame();
+      if (!game) return;
+      const last = game.lastActiveAt;
+      if (!last) return;
+
+      const awayMs = Date.now() - last;
+      if (awayMs < 5 * 60 * 1000) return;
+
+      const awayMinutes = awayMs / 60000;
+      let days = Math.floor(awayMinutes * 0.5);
+      days = Math.min(180, Math.max(1, days));
+      if (days <= 0) return;
+
+      this.showToast(`离开 ${Math.floor(awayMinutes)} 分钟，游戏内推进 ${days} 天`);
+      this.simulateAway(days, game);
+    },
+    simulateAway(days, game) {
+      if (days <= 0) return;
+
+      // 调整借款时间，避免回来时连续催收或直接破产
+      this.adjustLoanForAway(game, days);
+
+      const startDate = new Date(game.currentDate);
+      let current = new Date(startDate);
+
+      // 模拟 days - 1 天的股票 K 线
+      for (let d = 0; d < days - 1; d++) {
+        current.setDate(current.getDate() + 1);
+        const dateStr = fmtDate(current);
+
+        const r = Math.random();
+        let marketEvent = null;
+        if (r < 0.07) marketEvent = 'bear';
+        else if (r < 0.12) marketEvent = 'bull';
+
+        (game.stocks || []).forEach(s => {
+          s.prevClose = s.price;
+          const pct = computeNextPct(s, marketEvent);
+          s.limitUp = round2(s.prevClose * 1.1);
+          s.limitDown = round2(s.prevClose * 0.9);
+
+          const targetClose = clamp(round2(s.prevClose * (1 + pct / 100)), s.limitDown, s.limitUp);
+          const open = clamp(round2(s.prevClose * (1 + rand(-0.015, 0.015))), s.limitDown, s.limitUp);
+          let high = Math.max(open, targetClose);
+          let low  = Math.min(open, targetClose);
+          high = round2(high * (1 + rand(0, 0.018)));
+          low  = round2(low  * (1 - rand(0, 0.018)));
+
+          s.price = targetClose;
+          s.open = open;
+          s.history.push({ date: dateStr, open, close: targetClose, high, low });
+          if (s.history.length > 180) s.history = s.history.slice(-180);
+
+          const pctDay = (targetClose - s.prevClose) / s.prevClose * 100;
+          if (pctDay > 0) { s.upStreak++; s.downStreak = 0; }
+          else if (pctDay < 0) { s.downStreak++; s.upStreak = 0; }
+          else { s.upStreak = 0; s.downStreak = 0; }
+          s.prevLimitUp = pctDay >= 9.9;
+          s.prevBigGain = pctDay >= 4 && pctDay <= 7;
+        });
+      }
+
+      // 日期设为 startDate + (days - 1)，然后 nextDay 推进到 startDate + days 并开始交易
+      game.currentDate = new Date(startDate);
+      game.currentDate.setDate(game.currentDate.getDate() + (days - 1));
+      game.stocks.forEach(s => { s._randomPrice = undefined; });
+
+      this.game = game;
+      this.nextDay();        // 内部会调用 beginDay + refresh，自动补结算所有公司业务
+      this.saveGameClock();
+    },
+    adjustLoanForAway(game, days) {
+      const co = game.company;
+      if (!co || !co.loan) return;
+      const loan = co.loan;
+      if (!loan.balance || loan.balance <= 0) return;
+      if (loan.creditStatus === 'bankrupt') return;
+
+      const newDate = new Date(game.currentDate);
+      newDate.setDate(newDate.getDate() + days);
+      const newDateStr = fmtDate(newDate);
+
+      if (loan.creditStatus === 'dishonest') {
+        const dh = new Date(newDate);
+        dh.setDate(dh.getDate() - 1);
+        loan.dishonestAt = fmtDate(dh);
+        return;
+      }
+
+      if (loan.collectStage === 0) {
+        const start = new Date(newDate);
+        start.setDate(start.getDate() - 90);
+        loan.startDate = fmtDate(start);
+      } else {
+        const thresholds = [0, 90, 120, 150, 180];
+        const nextThreshold = thresholds[Math.min(loan.collectStage + 1, 4)];
+        const targetDays = Math.max(1, nextThreshold - 1);
+        const start = new Date(newDate);
+        start.setDate(start.getDate() - targetDays);
+        loan.startDate = fmtDate(start);
+      }
+    },
     /* ==================== 时钟 / 行情推进 ==================== */
     startClock() {
       if (!this.game) return;
@@ -3107,7 +4379,7 @@ createApp({
       this.game.dayDuration = this.dayDuration;
       this.game.breakDuration = this.breakDuration;
       const clean = this.game.stocks.map(s => ({ ...s, _randomPrice: undefined }));
-      writeGame({ ...this.game, stocks: clean });
+      writeGame({ ...this.game, stocks: clean,  lastActiveAt: Date.now() });
     },
 
     tick() {
@@ -3241,7 +4513,15 @@ createApp({
           address: f.address.trim(),
           foundedAt: fmtDate(currentDate),
           employees: [],
-          loan: { balance: 0, lastInterestDate: fmtDate(currentDate) },
+          loan: {
+            balance: 0,
+            lastInterestDate: fmtDate(currentDate),
+            startDate: null,
+            collectStage: 0,
+            lastCollectAt: null,
+            dishonestAt: null,
+            creditStatus: 'normal',
+          },
           finance: {
             lastMonth: fmtMonth(currentDate),
             initialNetAssets: round2(acc.totalAssets),
@@ -3273,6 +4553,7 @@ createApp({
           receivables: { balance: 0, lastCollectDate: fmtDate(currentDate) },
           receivableConfig: { rate: 0.05, chance: 0.5 },
           products: [],
+          acquisitions: [],
         };
 
         writeCompany(company);
@@ -3299,7 +4580,9 @@ createApp({
         const game = readGame();
         const company = normalizeCompany(readCompany());
         if (!game || !company) return;
-
+        if (company.loan.creditStatus === 'dishonest' || company.loan.creditStatus === 'bankrupt') {
+          return this.showToast('公司信用异常，无法新增产品');
+        }
         const cost = wan * 10000;
         if (cost > Number(game.cash)) {
           return this.showToast(`公司现金不足，需要 ${cost.toLocaleString()} 元`);
@@ -3436,7 +4719,9 @@ createApp({
         const game = readGame();
         const company = normalizeCompany(readCompany());
         if (!game || !company) return;
-
+        if (company.loan.creditStatus === 'dishonest' || company.loan.creditStatus === 'bankrupt') {
+          return this.showToast('公司信用异常，无法新增置业资产');
+        }
         const totalCost = this.propertyTotalCost;
         if (totalCost > Number(game.cash)) {
           return this.showToast(`公司现金不足，需要 ${totalCost.toLocaleString()} 元`);
@@ -3589,6 +4874,9 @@ createApp({
         if(cash < parseInt(person.salary)*2){
           this.showToast('公司现金至少要能支付其2个月薪水才能招聘他');
           return
+        }
+        if (company.loan.creditStatus === 'dishonest' || company.loan.creditStatus === 'bankrupt') {
+          return this.showToast('公司信用异常，无法招聘员工');
         }
         // 招聘管理人员前检查：当前每位高管需至少 4 名普通员工
         if (person.type === 'manager') {
@@ -3797,7 +5085,7 @@ createApp({
           ...d,
           itemStyle: {
             color: d.name === '负债' ? '#3fd07c'
-                : d.name === '净资产' ? '#1f6feb'
+                : d.name === '资产总额' ? '#1f6feb'
                 : '#d29922',
           },
         })),
@@ -3951,7 +5239,7 @@ createApp({
         type: 'bar',
         data: data.map(d => ({
           value: d.value,
-          itemStyle: { color: d.value >= 0 ? '#1f6feb' : '#3fd07c' },
+          itemStyle: { color: d.value >= 0 ? '#f5484d' : '#3fd07c' },
         })),
         barMaxWidth: 46,
         label: {
@@ -4024,14 +5312,24 @@ createApp({
         if (!(amt > 0)) return this.showToast('请输入借款金额');
         const avail = this.loanLimit - this.company.loan.balance;
         if (amt > avail) return this.showToast(`超出可借额度，最多可借 ${avail.toFixed(2)} 元`);
-
+        if (company.loan.creditStatus === 'dishonest' || company.loan.creditStatus === 'bankrupt') {
+          return this.showToast('公司信用异常，无法借款');
+        }
         const game = readGame();
         const company = readCompany();
         if (!game || !company) return;
 
         const today = fmtDate(new Date(game.currentDate));
         company.loan.balance = round2(company.loan.balance + amt);
+        const wasZero = !company.loan.balance || company.loan.balance <= 0;
+        company.loan.balance = round2(company.loan.balance + amt);
         company.loan.lastInterestDate = today;
+        if (wasZero) {
+          company.loan.startDate = today;
+          company.loan.collectStage = 0;
+          company.loan.lastCollectAt = null;
+          company.loan.dishonestAt = null;
+        }
         game.cash = round2(Number(game.cash) + amt);
 
         writeCompany(company);    // 先写账
@@ -4053,7 +5351,18 @@ createApp({
         if (amt > Number(game.cash))    return this.showToast('公司现金不足');
 
         company.loan.balance = round2(company.loan.balance - amt);
-        if (company.loan.balance < 0.01) company.loan.balance = 0;
+        const wasDishonest = company.loan.creditStatus === 'dishonest';
+        if (company.loan.balance < 0.01) {
+          company.loan.balance = 0;
+          company.loan.startDate = null;
+          company.loan.collectStage = 0;
+          company.loan.lastCollectAt = null;
+          if (wasDishonest) {
+            company.loan.creditStatus = 'normal';
+            company.loan.dishonestAt = null;
+            this.showToast('已还清全部欠款，企业信用恢复！');
+          }
+        }
         game.cash = round2(Number(game.cash) - amt);
 
         writeCompany(company);
@@ -4062,6 +5371,122 @@ createApp({
         this.loanModal = null;
         this.refresh();
         this.showToast(`还款 ${amt.toFixed(2)} 元成功`);
+    },
+    /* ==================== 企业收购 / 子公司 ==================== */
+    openAcquisitionDetail(item) {
+      this.acquisitionDetail = item;
+    },
+    buyCompany(item) {
+      const game = readGame();
+      const company = normalizeCompany(readCompany());
+      if (!game || !company) return;
+
+      if ((company.acquisitions || []).some(a => a.id === item.id)) {
+        return this.showToast('该企业已收购');
+      }
+
+      const priceWan = round2(item.totalAssets * 1.8 - item.liabilities * 0.5);
+      const priceYuan = priceWan * 10000;
+      if (priceYuan > Number(game.cash)) {
+        return this.showToast(`公司现金不足，收购需要 ${priceWan} 万元`);
+      }
+
+      const today = fmtDate(new Date(game.currentDate));
+      game.cash = round2(Number(game.cash) - priceYuan);
+
+      company.acquisitions.push({
+        id: item.id,
+        name: item.name,
+        industry: item.industry,
+        mainProducts: item.mainProducts,
+        img: item.img,
+        address: item.address,
+        employees: item.employees,
+        averNetProfit: item.averNetProfit,
+        initialTotalAssets: item.totalAssets,
+        initialLiabilities: item.liabilities,
+        currentAssets: item.totalAssets,
+        liabilitiesRemaining: item.liabilities,
+        acquiredAt: today,
+        acquirePriceWan: priceWan,
+        weeklyIncome: 0,
+        monthRevenueWan: 0,
+        totalProfitWan: 0,
+        lastWeekSettleDate: today,
+        lastMonthSettleDate: today,
+        reports: [],
+      });
+
+      writeCompany(company);
+      writeGame(game);
+      this.acquisitionDetail = null;
+      this.refresh();
+      this.showToast(`成功收购「${item.name}」，支付 ${priceWan} 万元`);
+    },
+    openSubsidiaryDetail(sub) {
+      this.subsidiaryDetail = sub;
+      this.subRepayInput = 0;
+    },
+    repaySubsidiary() {
+      const sub = this.subsidiaryDetail;
+      if (!sub) return;
+      const wan = Number(this.subRepayInput) || 0;
+      if (wan <= 0) return this.showToast('请输入还款金额（万元）');
+
+      const game = readGame();
+      const company = normalizeCompany(readCompany());
+      if (!game || !company) return;
+
+      const target = (company.acquisitions || []).find(a => a.id === sub.id);
+      if (!target) return;
+
+      const remainWan = Number(target.liabilitiesRemaining) || 0;
+      if (remainWan <= 0) return this.showToast('该子公司已无负债');
+      if (wan > remainWan) return this.showToast(`还款金额不能超过剩余负债 ${remainWan} 万元`);
+
+      const costYuan = round2(wan * 10000);
+      if (costYuan > Number(game.cash)) return this.showToast('公司现金不足');
+
+      game.cash = round2(Number(game.cash) - costYuan);
+      target.liabilitiesRemaining = round2(remainWan - wan);
+      if (target.liabilitiesRemaining < 0.01) target.liabilitiesRemaining = 0;
+
+      writeCompany(company);
+      writeGame(game);
+      this.subRepayInput = 0;
+      this.refresh();
+      this.subsidiaryDetail = company.acquisitions.find(a => a.id === sub.id);
+      this.showToast(`已偿还「${target.name}」负债 ${wan} 万元`);
+    },
+    transferCompany(sub) {
+      if (!sub) return;
+      if(sub.currentAssets<0){
+        if (!confirm(`确定以5万元转让「${sub.name}」？（公司资产为负数，只能以5万元售出）`)) return;
+      }else{
+        if (!confirm(`确定以 ${round2((sub.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining*0.5)} 万元转让「${sub.name}」？`)) return;
+      }
+
+      const game = readGame();
+      const company = normalizeCompany(readCompany());
+      if (!game || !company) return;
+
+      const target = (company.acquisitions || []).find(a => a.id === sub.id);
+      if (!target) return;
+
+      const sellWan = sub.currentAssets<0 ? 5:round2((target.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining*0.5);
+      const sellYuan = sellWan * 10000;
+      game.cash = round2(Number(game.cash) + sellYuan);
+
+      // 子公司剩余负债从母公司总负债中移除
+      // 子公司剩余负债随转让一起剥离，不触碰母公司借款与其他子公司
+      // （主动还款已体现在 liabilitiesRemaining 里，这里无需再扣）
+
+      company.acquisitions = company.acquisitions.filter(a => a.id !== sub.id);
+      writeCompany(company);
+      writeGame(game);
+      this.subsidiaryDetail = null;
+      this.refresh();
+      this.showToast(`已转让「${target.name}」，获得 ${sellWan} 万元`);
     },
   },
 }).mount('#app');
