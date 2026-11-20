@@ -805,6 +805,8 @@ createApp({
       detailBackPage: 'market',
       hasCompany: false,
       stockProfit: 0,
+      companyLoan: 0,
+      lastActiveAt: null,
     };
   },
 
@@ -859,7 +861,7 @@ createApp({
     },
 
     totalPnl() {
-      return this.totalAssets - this.initialCash;
+      return this.totalAssets - this.companyLoan - this.initialCash;
     },
 
     todayPnl() {
@@ -908,6 +910,7 @@ mounted() {
   const saved = readStorage();
   if (saved) {
     this.restoreState(saved);          // 有存档：恢复
+    this.checkAway();
   } else {
     this.stocks = STOCK_SEED.map(createStock);  // 无存档：初始化
     this.beginDay();
@@ -963,6 +966,7 @@ saveState() {
   const state = {
     version: STORAGE_VERSION,
     savedAt: Date.now(),
+    lastActiveAt: Date.now(),
     initialCash: this.initialCash,
     cash: this.cash,
     positions: this.positions,
@@ -987,11 +991,13 @@ saveState() {
 checkCompany() {
   try {
     const raw = localStorage.getItem('sim-stock-company-v1');
-    if (!raw) { this.hasCompany = false; return; }
+    if (!raw) { this.hasCompany = false; this.companyLoan = 0; return; }
     const obj = JSON.parse(raw);
     this.hasCompany = !!(obj && obj.data && obj.data.name);
+    this.companyLoan = Number(obj?.data?.loan?.balance) || 0;
   } catch (e) {
     this.hasCompany = false;
+    this.companyLoan = 0;
   }
 },
 restoreState(saved) {
@@ -1041,7 +1047,7 @@ restoreState(saved) {
     );
 
     this.stocks = restored;
-
+  this.lastActiveAt = saved.lastActiveAt || null;
   this.currentDate = new Date(saved.currentDate || GAME_START_DATE.getTime());
   this.dayDuration = saved.dayDuration || 60;
   this.breakDuration = saved.breakDuration || 15;
@@ -1404,7 +1410,106 @@ restoreState(saved) {
     }],
   });
 },
+    checkAway() {
+      if (!this.lastActiveAt) return;
+      const awayMs = Date.now() - this.lastActiveAt;
+      if (awayMs < 5 * 60 * 1000) return;   // 离开 5 分钟内不推进
 
+      const awayMinutes = awayMs / 60000;
+      let days = Math.floor(awayMinutes * 0.5);   // 1 小时 = 30 天
+      days = Math.min(180, Math.max(1, days));
+      if (days <= 0) return;
+
+      this.showToast(`离开 ${Math.floor(awayMinutes)} 分钟，游戏内推进 ${days} 天`);
+      this.simulateAway(days);
+    },
+    simulateAway(days) {
+      if (days <= 0) return;
+
+      // ---------- 调整借款时间，避免公司页打开时连续催收 ----------
+      this.adjustCompanyLoanForAway(days);
+
+      const startDate = new Date(this.currentDate);
+      let current = new Date(startDate);
+
+      // 模拟 days - 1 天，最后一天交给 nextDay 正常开始
+      for (let d = 0; d < days - 1; d++) {
+        current.setDate(current.getDate() + 1);
+        const dateStr = fmtDate(current);
+
+        const r = Math.random();
+        let marketEvent = null;
+        if (r < 0.07) marketEvent = 'bear';
+        else if (r < 0.12) marketEvent = 'bull';
+
+        this.stocks.forEach(s => {
+          s.prevClose = s.price;
+          const pct = computeNextPct(s, marketEvent);
+          s.limitUp = round2(s.prevClose * 1.1);
+          s.limitDown = round2(s.prevClose * 0.9);
+
+          const targetClose = clamp(round2(s.prevClose * (1 + pct / 100)), s.limitDown, s.limitUp);
+          const open = clamp(round2(s.prevClose * (1 + rand(-0.015, 0.015))), s.limitDown, s.limitUp);
+          let high = Math.max(open, targetClose);
+          let low  = Math.min(open, targetClose);
+          high = round2(high * (1 + rand(0, 0.018)));
+          low  = round2(low  * (1 - rand(0, 0.018)));
+
+          s.price = targetClose;
+          s.open = open;
+          s.history.push({ date: dateStr, open, close: targetClose, high, low });
+          if (s.history.length > 180) s.history = s.history.slice(-180);
+
+          const pctDay = (targetClose - s.prevClose) / s.prevClose * 100;
+          if (pctDay > 0) { s.upStreak++; s.downStreak = 0; }
+          else if (pctDay < 0) { s.downStreak++; s.upStreak = 0; }
+          else { s.upStreak = 0; s.downStreak = 0; }
+          s.prevLimitUp = pctDay >= 9.9;
+          s.prevBigGain = pctDay >= 4 && pctDay <= 7;
+        });
+      }
+
+      // 设置日期为 startDate + (days - 1)
+      this.currentDate = new Date(startDate);
+      this.currentDate.setDate(this.currentDate.getDate() + (days - 1));
+      this.nextDay();        // 推进到最后一天并开始交易
+      this.saveState();
+    },
+    adjustCompanyLoanForAway(days) {
+      try {
+        const raw = localStorage.getItem('sim-stock-company-v1');
+        if (!raw) return;
+        const obj = JSON.parse(raw);
+        if (!obj || !obj.data || !obj.data.loan) return;
+
+        const loan = obj.data.loan;
+        if (!loan.balance || loan.balance <= 0) return;
+        if (loan.creditStatus === 'bankrupt') return;
+
+        const newDate = new Date(this.currentDate);
+        newDate.setDate(newDate.getDate() + days);
+        const newDateStr = fmtDate(newDate);
+
+        if (loan.creditStatus === 'dishonest') {
+          const dh = new Date(newDate);
+          dh.setDate(dh.getDate() - 1);
+          loan.dishonestAt = fmtDate(dh);
+        } else if (loan.collectStage === 0) {
+          const start = new Date(newDate);
+          start.setDate(start.getDate() - 90);
+          loan.startDate = fmtDate(start);
+        } else {
+          const thresholds = [0, 90, 120, 150, 180];
+          const nextThreshold = thresholds[Math.min(loan.collectStage + 1, 4)];
+          const targetDays = Math.max(1, nextThreshold - 1);
+          const start = new Date(newDate);
+          start.setDate(start.getDate() - targetDays);
+          loan.startDate = fmtDate(start);
+        }
+
+        localStorage.setItem('sim-stock-company-v1', JSON.stringify(obj));
+      } catch (e) { /* 忽略 */ }
+    },
     onResize() {
       if (this._chart) this._chart.resize();
     },
