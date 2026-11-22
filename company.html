@@ -115,6 +115,17 @@
   .person-card.manager { border-color: #d29922; background: linear-gradient(160deg, #1d1a12, #141b26); }
   .person-card.manager-top { border-color: #f5484d; }
   .person-card.staff { border-color: #1f6feb; background: linear-gradient(160deg, #121a26, #141b26); }
+  .avatar-wrap { flex-shrink: 0; }
+  .avatar {
+    width: 56px; height: 56px; border-radius: 50%;
+    object-fit: cover; display: block; background: #1c2333;
+  }
+  .avatar-placeholder {
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1f6feb, #a371f7);
+    color: #fff; font-size: 22px; font-weight: 700;
+  }
+  .avatar-lg { width: 96px; height: 96px; font-size: 36px; }
   .person-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .person-name { font-size: 16px; font-weight: 700; }
   .type-tag { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-weight: 600; }
@@ -260,9 +271,46 @@
   .speed-btn:hover:not(:disabled) { border-color: #3d4a5f; color: #d1d5db; }
   .speed-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
   .product-card {
-    background: #141b26; border: 1px solid #2b3444; border-radius: 12px;
+    border: 1px solid #2b3444; border-radius: 12px;
     overflow: hidden; cursor: pointer; transition: all .15s;
     display: flex; flex-direction: column;
+    position: relative;
+  }
+  .product-card::before {
+    content: '';
+    position: absolute;
+    top: -46px; right: -46px;
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: var(--type-color, #1f6feb);
+    opacity: 0.10;
+    pointer-events: none;
+  }
+  .product-card::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: -40px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: var(--type-color, #1f6feb);
+    opacity: 0.06;
+    pointer-events: none;
+  }
+  .product-card:hover { transform: translateY(-2px); }
+  .product-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; gap: 8px;
+    position: relative; z-index: 1;
+    background: rgba(0,0,0,.08);
+    backdrop-filter: blur(2px);
+  }
+  .product-name { font-size: 15px; font-weight: 700; color: #e6edf3; position: relative; z-index: 1; }
+  .product-type-tag { font-size: 12px; font-weight: 600; position: relative; z-index: 1; }
+  .product-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
+  .product-meta { font-size: 12px; color: #8b949e; }
+  .product-status {
+    margin-top: 6px; align-self: flex-start;
+    font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600;
   }
   .product-card:hover { transform: translateY(-2px); }
   .product-head {
@@ -377,6 +425,7 @@
       <button :class="{ active: tab === 'products' }" @click="tab = 'products'">产品研发</button>
       <button :class="{ active: tab === 'acquisitions' }" @click="tab = 'acquisitions'">企业收购</button>
       <button :class="{ active: tab === 'subsidiaries' }" @click="tab = 'subsidiaries'">子公司</button>
+	  <button :class="{ active: tab === 'finance-biz' }" @click="tab = 'finance-biz'">金融业务</button>
     </nav>
 
     <!-- ============ 公司概况 ============ -->
@@ -483,17 +532,28 @@
         </div>
         <div class="grid-cards">
           <div v-for="p in company.talentMarket" :key="p.id"
-          class="person-card" :class="cardClass(p)" @click="talentDetail = p">
-            <div class="person-head">
-              <span class="person-name">{{ p.name }}</span>
-              <span class="type-tag" :class="p.type">{{ p.type === 'manager' ? ('高管 · ' + managerRoleName(p)) : (p.position || '普通员工') }}</span>
+               class="person-card" :class="cardClass(p)" @click="talentDetail = p">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div class="avatar-wrap">
+                <img v-if="p.avatar" :src="p.avatar" class="avatar" :alt="p.name">
+                <div v-else class="avatar avatar-placeholder">{{ p.name ? p.name[0] : '?' }}</div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div class="person-head">
+                  <span class="person-name">{{ p.name }}</span>
+                  <span class="type-tag" :class="p.type">
+                    {{ p.type === 'manager' ? ('管理 · ' + managerRoleName(p)) : (p.position || '普通员工') }}
+                  </span>
+                </div>
+                <div class="person-meta">
+                  {{ p.gender }} · {{ p.age }}岁 · {{ p.hometown }}<br>
+                  {{ p.school }}<br>
+				  意向岗位：{{p.type === 'manager' ? (managerRoleName(p)) : (p.position || '无')}}
+                </div>
+                <div class="person-salary">¥{{ p.salary.toLocaleString() }}<span> / 月</span></div>
+                <!-- <div class="person-eval">{{ p.selfEval }}</div> -->
+              </div>
             </div>
-            <div class="person-meta">
-              {{ p.gender }} · {{ p.age }}岁 · {{ p.hometown }}<br>
-              {{ p.school }}
-            </div>
-            <div class="person-salary">¥{{ p.salary.toLocaleString() }}<span> / 月</span></div>
-            <div class="person-eval">{{ p.selfEval }}</div>
           </div>
           <div v-if="!company.talentMarket || company.talentMarket.length === 0" class="empty" style="grid-column:1/-1">
             人才市场暂无候选人
@@ -547,7 +607,7 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>月份</th><th>资产总额</th><th>负债总额</th><th>净资产</th><th>月收益</th><th>详情</th></tr>
+              <tr><th>月份</th><th>资产总额</th><th>负债总额</th><th>净资产</th><th>月净利润</th><th>详情</th></tr>
             </thead>
             <tbody>
               <tr v-for="r in pagedReports" :key="r.month">
@@ -593,6 +653,9 @@
         <div class="item">员工总数 <b>{{ company.employees.length }}</b></div>
         <div class="item">管理人员 <b>{{ managerCount }}</b></div>
         <div class="item">普通员工 <b>{{ staffCount }}</b></div>
+		<div class="item" v-if="pendingHiresCount > 0">
+		  待入职 <b>{{ pendingHiresCount }}</b> 人
+		</div>
         <div class="item">月薪资总额 <b>¥{{ fmtBig(totalSalary) }}</b></div>
         <div class="item">
           最近结算周收益（{{ managerIncomeDateLabel }}）
@@ -628,9 +691,15 @@
         <div class="grid-cards">
           <div v-for="e in hrFilteredEmployees" :key="e.id"
               class="person-card emp-card" :class="cardClass(e)">
+		<div style="display:flex;gap:12px;align-items:flex-start">
+			  <div class="avatar-wrap">
+				<img v-if="e.avatar" :src="e.avatar" class="avatar" :alt="e.name">
+				<div v-else class="avatar avatar-placeholder">{{ e.name ? e.name[0] : '?' }}</div>
+			  </div>
+		<div style="flex:1;min-width:0">
             <div class="person-head">
               <span class="person-name">{{ e.name }}</span>
-              <span class="type-tag" :class="e.type">{{ e.type === 'manager' ? ('管理人员 · ' + managerRoleName(e)) : (e.position || '普通员工') }}</span>
+              <span class="type-tag" :class="e.type">{{ e.type === 'manager' ? ('管理 · ' + managerRoleName(e)) : (e.position || '普通员工') }}</span>
             </div>
             <div class="person-meta">
               {{ e.gender }} · {{ e.age }}岁 · {{ e.hometown }}<br>
@@ -639,9 +708,11 @@
             </div>
             <div v-if="e.status === 'business'"
             style="font-size:12px;color:#d29922;margin-top:4px">✈ 出差中</div>
+			<div v-if="e.status === 'lent'"
+			     style="font-size:12px;color:#58a6ff;margin-top:4px">🔁 已借调</div>
             <div class="person-salary">¥{{ e.salary.toLocaleString() }}<span> / 月</span></div>
 
-            <div v-if="e.type === 'manager'" style="font-size:13px;margin-top:6px;color:#8b949e">
+            <div v-if="e.type === 'manager' && managerRoleName(e).indexOf('首席') == -1 && managerRoleName(e).indexOf('法务') == -1" style="font-size:13px;margin-top:6px;color:#8b949e">
               上周收益：
               <span :class="pnlClass(e.lastWeekIncome || 0)" style="font-weight:600">
                 {{ fmtBigSigned(e.lastWeekIncome || 0) }}
@@ -653,7 +724,7 @@
 
             <button v-if="employeeDeptMap[e.id]"
                     class="fire-btn" style="background:#1c2333;color:#58a6ff;border-color:#1f6feb"
-                    @click="removeFromDept(e)">移除部门</button>
+                    @click.stop="removeFromDept(e)">移除部门</button>
             <!-- <div style="font-size:11px;color:#6e7681;margin-top:6px">
               解雇补偿：
               <span :class="pnlClass(-fireCost(e))">{{ fireCost(e) > 0 ? fireCost(e).toFixed(2) + ' 元' : '无需支付' }}</span>
@@ -661,12 +732,14 @@
                 （入职未满1个月，不可解雇）
               </span>
             </div> -->
-            <button class="fire-btn" @click="fire(e)">解雇</button>
+            <button class="fire-btn" @click.stop="fire(e)">解雇</button>
           </div>
+		  </div>
           <div v-if="hrFilteredEmployees.length === 0" class="empty" style="grid-column:1/-1">
             该部门暂无人员
           </div>
         </div>
+		</div>
       </div>
     </section>
     <section v-if="tab === 'external'">
@@ -754,7 +827,7 @@
     </section>
     <section v-if="tab === 'properties'">
       <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <button class="act" @click="openPropertyForm">＋ 购买地盘</button>
+        <button class="act" @click="openPropertyForm">＋ 新建地盘</button>
         <span style="font-size:12px;color:#6e7681">共 {{ propertyList.length }} 处置业资产</span>
       </div>
 
@@ -803,7 +876,6 @@
         <div class="stat">
           <div class="label">总运营费</div>
           <div class="value down">{{ fmtBig(totalOperationFee) }}</div>
-          <div class="sub">销售中产品每周运营费累计</div>
         </div>
       </div>
 
@@ -813,8 +885,13 @@
       </div>
 
       <div class="grid-cards" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))">
-        <div v-for="p in pagedProducts" :key="p.id"
-            class="product-card" :style="{ borderColor: productColor(p.type) }"
+		<div v-for="p in pagedProducts" :key="p.id"
+            class="product-card"
+            :style="{
+              borderColor: productColor(p.type),
+              '--type-color': productColor(p.type),
+              background: 'linear-gradient(135deg, ' + productColor(p.type) + '1a 0%, #141b26 60%)'
+            }"
             @click="openProductDetail(p)">
           <div class="product-head" :style="{ background: productColor(p.type) + '22' }">
             <span class="product-name">{{ p.name }}</span>
@@ -823,8 +900,10 @@
           <div class="product-body">
             <div class="product-meta">投资金额：{{ p.investWan }} 万元<span v-if="p.extraInvestWan"> + {{ p.extraInvestWan }} 万</span></div>
             <div class="product-meta">研发周期：{{ p.rndDays }} 天</div>
-            <div class="product-meta">本周收益：<span :class="pnlClass(p.weeklyIncome)">{{ fmtBigSigned(p.weeklyIncome) }}</span></div>
+            <div class="product-meta">本周销售额：<span :class="pnlClass(p.weeklyIncome)">{{ fmtBigSigned(p.weeklySellMoney) }}</span></div>
             <div class="product-meta">本周运营费：<span class="down">{{ fmtBig(p.weeklyOperationFee || 0) }}</span></div>
+			<div class="product-meta">产品成本：<span class="down">{{ fmtBig(p.weeklySellMoney*(1 - productType[p.type].maoli) || 0) }}</span></div>
+			<div class="product-meta">运营人员：{{ (p.assignedEmployees || []).length }} 人</div>
             <div class="product-meta">净利润：<span :class="pnlClass(p.totalIncome - p.totalOperationFee)">{{ fmtBigSigned(p.totalIncome - p.totalOperationFee) }}</span></div>
             <div class="product-status"
                 :class="p.status === '研发中' ? 'status-building' : 'status-profit'">
@@ -845,7 +924,7 @@
     </section>
     <section v-if="tab === 'acquisitions'">
       <div class="grid-cards" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))">
-        <div v-for="c in availableAcquisitions" :key="c.id" class="project-card" @click="openAcquisitionDetail(c)">
+        <div v-for="c in pagedAcquisitions" :key="c.id" class="project-card" @click="openAcquisitionDetail(c)">
           <div class="project-img-wrap">
             <img :src="c.img" :alt="c.name" @error="$event.target.style.display='none'">
             <span class="project-type-tag">{{ c.industry }}</span>
@@ -860,9 +939,14 @@
             </div>
           </div>
         </div>
-        <div v-if="availableAcquisitions.length === 0" class="empty" style="grid-column:1/-1">
+        <div v-if="availableAcquisitionsAll.length === 0" class="empty" style="grid-column:1/-1">
           暂无可收购企业
         </div>
+		<div class="pager" v-if="totalAcquisitionPages > 1">
+		  <button class="speed-btn" :disabled="acquisitionPage <= 1" @click="acquisitionPage--">上一页</button>
+		  <span class="pager-info">{{ acquisitionPage }} / {{ totalAcquisitionPages }}</span>
+		  <button class="speed-btn" :disabled="acquisitionPage >= totalAcquisitionPages" @click="acquisitionPage++">下一页</button>
+		</div>
       </div>
     </section>
     <section v-if="tab === 'subsidiaries'">
@@ -874,7 +958,8 @@
         <div class="stat">
           <div class="label">子公司上周盈利合计</div>
           <div class="value" :class="pnlClass(acquisitionRevenueWeekly)">{{ fmtBigSigned(acquisitionRevenueWeekly * 10000) }}</div>
-        </div>
+        <div class="sub">子公司盈利每月入公司账户</div>
+		</div>
       </div>
 
       <div class="grid-cards" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))">
@@ -887,7 +972,11 @@
             <div class="project-name">{{ s.name }}</div>
             <div class="project-meta">净资产：{{ s.currentAssets }} 万元 · 员工：{{ s.employees }} 人</div>
             <div class="project-meta">上月净利润：{{ s.reports.length ? s.reports[s.reports.length - 1].profit : 0 }} 万元</div>
-            <div class="project-income-row">
+            <div class="project-meta" v-if="s.ceoId || s.secretaryId">
+              <span v-if="s.ceoId">CEO 已分配</span>
+              <span v-if="s.secretaryId" style="margin-left:8px">秘书已分配</span>
+            </div>
+			<div class="project-income-row">
               <span>上周盈利：<b :class="pnlClass(s.weeklyIncome)">{{ s.weeklyIncome }} 万元</b></span>
             </div>
           </div>
@@ -897,6 +986,80 @@
         </div>
       </div>
     </section>
+	<section v-if="tab === 'finance-biz' && financeBusiness">
+	  <div class="stats" style="margin-bottom:14px">
+	    <div class="stat">
+	      <div class="label">放贷池余额（含利息收入）</div>
+	      <div class="value">{{ fmtBig(financePoolBalance * 10000) }}</div>
+	      <div class="sub">最少需 50 万才能开始放贷，池金额可提现</div>
+	    </div>
+	    <div class="stat">
+	      <div class="label">未还贷款</div>
+	      <div class="value down">{{ fmtBig(financeUnpaidLoans * 10000) }}</div>
+	    </div>
+	    <div class="stat">
+	      <div class="label">赖账金额</div>
+	      <div class="value down">{{ fmtBig(financeBadDebt * 10000) }}</div>
+	      <div class="sub">也会按年利率计息</div>
+	    </div>
+	    <div class="stat">
+	      <div class="label">总利息收入</div>
+	      <div class="value up">{{ fmtBig(financeTotalInterest * 10000) }}</div>
+	      <div class="sub">年利率 {{ financeBusiness.annualRate }}%</div>
+	    </div>
+	  </div>
+	
+	  <div class="card">
+	    <div class="card-title">业务配置</div>
+	    <div class="form-item">
+	      <label>资金注入（万元，整数）</label>
+	      <input v-model.number="financeInject" type="number" min="0" step="1"
+	             style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+	    </div>
+	    <div class="form-item">
+	      <label>年利率（2 ~ 80，单位 %）</label>
+	      <input v-model.number="financeRate" type="number" min="2" max="80" step="1"
+	             style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+	    </div>
+	    <button class="act" style="width:100%" @click="confirmFinance">确认</button>
+	
+	    <div style="margin-top:14px;padding-top:12px;border-top:1px solid #21262d">
+	      <label style="font-size:13px;color:#8b949e;display:block;margin-bottom:6px">提取金额（万元）</label>
+	      <div style="display:flex;gap:8px">
+	        <input v-model.number="financeWithdraw" type="number" min="0" step="1"
+	               style="flex:1;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+	        <button class="act" :disabled="financePoolBalance <= 0" @click="withdrawFinance">提取</button>
+	      </div>
+	    </div>
+	  </div>
+	
+	  <div class="card">
+	    <div class="card-title">贷款统计（最近 {{ financeRecordsDesc.length }} 天）</div>
+	    <div class="table-wrap">
+	      <table>
+	        <thead>
+	          <tr><th>日期</th><th>放贷金额（万）</th><th>还款金额（万）</th><th>利息（元）</th></tr>
+	        </thead>
+	        <tbody>
+	          <tr v-for="r in pagedFinanceRecords" :key="r.date">
+	            <td>{{ r.date }}</td>
+	            <td class="num">{{ r.lent.toFixed(2) }}</td>
+	            <td class="num down">{{ r.repaid.toFixed(2) }}</td>
+	            <td class="num up">{{ r.interestYuan.toLocaleString() }}</td>
+	          </tr>
+	          <tr v-if="pagedFinanceRecords.length === 0">
+	            <td colspan="4" class="empty">暂无贷款记录，注入资金并等待每天结算</td>
+	          </tr>
+	        </tbody>
+	      </table>
+	    </div>
+	    <div class="pager" v-if="totalFinancePages > 1">
+	      <button class="speed-btn" :disabled="financePage <= 1" @click="financePage--">上一页</button>
+	      <span class="pager-info">{{ financePage }} / {{ totalFinancePages }}</span>
+	      <button class="speed-btn" :disabled="financePage >= totalFinancePages" @click="financePage++">下一页</button>
+	    </div>
+	  </div>
+	</section>
   </template>
 
 <!-- 新建部门 -->
@@ -933,7 +1096,7 @@
                @change="toggleImport(c.id)">
         <span>{{ c.name }}</span>
         <span style="font-size:12px;color:#8b949e">
-          {{ c.type === 'manager' ? ('管理人员 · ' + managerLevelName(c.level)) : '普通员工' }}
+          {{ c.type === 'manager' ? ('管理 · ' + managerLevelName(c.level)) : '普通员工' }}
         </span>
         <span style="margin-left:auto;font-size:12px;color:#6e7681">未分配部门</span>
       </label>
@@ -949,12 +1112,24 @@
   <!-- ============ 人才详情弹窗 ============ -->
   <div v-if="talentDetail" class="modal-mask" @click.self="talentDetail = null">
     <div class="modal">
-      <h3>{{ talentDetail.name }} · {{ talentDetail.type === 'manager' ? ('管理人员 · ' + managerRoleName(talentDetail)) : (talentDetail.position || '普通员工') }}</h3>
+		<div style="text-align:center;margin-bottom:12px">
+		  <img v-if="talentDetail.avatar" :src="talentDetail.avatar"
+			   style="width:96px;height:96px;border-radius:50%;object-fit:cover;display:inline-block"
+			   :alt="talentDetail.name">
+		  <div v-else class="avatar avatar-placeholder avatar-lg"
+			   style="margin:0 auto">{{ talentDetail.name ? talentDetail.name[0] : '?' }}</div>
+		</div>
+      <h3 style="text-align:center">{{ talentDetail.name }} · {{ talentDetail.type === 'manager' ? ('管理 · ' + managerRoleName(talentDetail)) : (talentDetail.position || '普通员工') }}</h3>
       <div class="row"><span>性别</span><span>{{ talentDetail.gender }}</span></div>
       <div class="row"><span>年龄</span><span>{{ talentDetail.age }} 岁</span></div>
       <div class="row"><span>籍贯</span><span>{{ talentDetail.hometown }}</span></div>
       <div class="row"><span>毕业院校</span><span>{{ talentDetail.school }}</span></div>
       <div class="row"><span>期望月薪</span><span>¥{{ talentDetail.salary.toLocaleString() }}</span></div>
+	  <div class="row">
+	    <span style="color:#3fd07c">
+	      招聘行政专员（人事），会加快入职时间
+	    </span>
+	  </div>
       <div class="row"><span>自我评价</span><span style="text-align:right;max-width:60%">{{ talentDetail.selfEval }}</span></div>
       <div v-if="talentDetail.type === 'manager' && managerHireBlocked"
           style="margin-top:12px;padding:8px 12px;background:rgba(245,72,77,.1);
@@ -1034,7 +1209,7 @@
       <div class="row"><span>负债总额</span><span>{{ fmtBig(reportDetail.liabilities) }}</span></div>
       <div class="row"><span>净资产</span><span>{{ fmtBig(reportDetail.netAssets) }}</span></div>
       <div class="row"><span>月末应收账款</span><span class="down">{{ fmtBig(reportDetail.receivables || 0) }}</span></div>
-      <div class="row"><span>月收益</span><span :class="pnlClass(reportDetail.income)">{{ fmtBigSigned(reportDetail.income) }}</span></div>
+      <div class="row"><span>月净利润</span><span :class="pnlClass(reportDetail.income)">{{ fmtBigSigned(reportDetail.income) }}</span></div>
       <div class="row"><span>人员总薪资</span><span>{{ fmtBig(reportDetail.detail.salary) }}&nbsp;&nbsp;绩效奖金&nbsp;&nbsp;<span>{{ fmtBig(reportDetail.detail.perf || 0) }}</span></span></div>
       <div class="row"><span>场地租赁费</span><span>{{ fmtBig(reportDetail.detail.rent) }}</span></div>
       <div class="row"><span>水电及其他</span><span>{{ fmtBig(reportDetail.detail.utilities) }}</span></div>
@@ -1138,8 +1313,8 @@
       </div>
 
       <div class="form-item">
-        <label>建筑面积（平方米，最低 600）</label>
-        <input v-model.number="propertyForm.area" type="number" min="600" step="1"
+        <label>建筑面积（平方米，最低 {{minArea}}）</label>
+        <input v-model.number="propertyForm.area" type="number" :min="minArea" step="1"
               style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
       </div>
 
@@ -1302,9 +1477,11 @@
     <div class="form-item">
       <label>产品类型</label>
       <select v-model="productForm.type"
+			@change="productTypeChange"
               style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
         <option v-for="t in PRODUCT_TYPES_LIST" :key="t" :value="t">{{ t }}</option>
       </select>
+	  <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">毛利率与产品类型有关</div>
     </div>
 
     <div class="form-item">
@@ -1341,12 +1518,13 @@
       <div class="row"><span>研发投入</span><span>{{ fmtBig((productDetail.investWan || 0) * 10000) }}</span></div>
       <div class="row" v-if="productDetail.extraInvestWan"><span>追加投资</span><span>{{ productDetail.extraInvestWan }} 万元</span></div>
       <div class="row"><span>广告投入</span><span>{{ productDetail.adFeeWan || 0 }} 万元</span></div>
+	  <div class="row"><span>产品成本</span><span class="down">{{ fmtBig(productDetail.weeklySellMoney*(1 - productType[productDetail.type].maoli) || 0) }}</span></div>
       <div class="row"><span>本周运营费</span><span class="down">{{ fmtBig(productDetail.weeklyOperationFee || 0) }}</span></div>
       <div class="row"><span>累计运营费</span><span class="down">{{ fmtBig(productDetail.totalOperationFee || 0) }}</span></div>
-      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">每招募1位【运营】员工，减少运营成本8%</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">每有1位【运营】员工，减少运营成本8%</div>
       <div class="row"><span>状态</span><span>{{ productDetail.status }}</span></div>
-      <div class="row"><span>本周收益</span><span :class="pnlClass(productDetail.weeklyIncome)">{{ fmtBigSigned(productDetail.weeklyIncome) }}</span></div>
-      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">招募【销售】或【生产工】或【产品经理】员工，收益增加。销售>生产工和产品经理</div>
+      <div class="row"><span>本周销售额</span><span :class="pnlClass(productDetail.weeklyIncome)">{{ fmtBigSigned(productDetail.weeklySellMoney) }}</span></div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">运营人员为【销售】或【生产工】或【产品经理】员工，收益增加。销售>生产工和产品经理</div>
       <div class="row"><span>总收益</span><span :class="pnlClass(productDetail.totalIncome)">{{ fmtBigSigned(productDetail.totalIncome) }}</span></div>
       <div class="row"><span>净利润</span><span :class="pnlClass(productDetail.totalIncome)">{{ fmtBigSigned(productDetail.totalIncome - productDetail.totalOperationFee) }}</span></div>
 
@@ -1357,7 +1535,27 @@
                 style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
         </div>
         <button class="act" style="width:100%" @click="investProductExtra">追加投资</button>
-
+		<div style="margin-top:16px;border-top:1px solid #21262d;padding-top:12px">
+		  <div style="font-size:13px;color:#8b949e;margin-bottom:8px">
+			运营人员：
+		  </div>
+		  <div style="max-height:32vh;overflow-y:auto">
+			<label v-for="e in availableProductEmployees" :key="e.id"
+				   style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #1c2128;cursor:pointer">
+			  <input type="checkbox"
+					 :checked="(productDetail.assignedEmployees || []).includes(e.id)"
+					 @change="toggleProductEmployee(e.id)">
+			  <span>{{ e.name }}</span>
+			  <span style="font-size:12px;color:#8b949e">{{ e.position }}</span>
+			</label>
+			<div v-if="availableProductEmployees.length === 0" class="empty" style="padding:16px 0">
+			  暂无可分配员工
+			</div>
+		  </div>
+		  <div style="font-size:12px;color:#6e7681;margin-top:6px">
+			已分配 {{ (productDetail.assignedEmployees || []).length }} 人
+		  </div>
+		</div>
         <div class="form-item" style="margin-top:14px">
           <label>投入广告（万元）</label>
           <input v-model.number="productAdInput" type="number" min="0" step="1"
@@ -1388,10 +1586,10 @@
       <div class="row"><span>行业</span><span>{{ acquisitionDetail.industry }}</span></div>
       <div class="row"><span>主营产品</span><span style="text-align:right;max-width:60%">{{ acquisitionDetail.mainProducts }}</span></div>
       <div class="row"><span>地址</span><span style="text-align:right;max-width:60%">{{ acquisitionDetail.address }}</span></div>
-      <div class="row"><span>总资产</span><span>{{ acquisitionDetail.totalAssets }} 万元</span></div>
-      <div class="row"><span>负债</span><span>{{ acquisitionDetail.liabilities }} 万元</span></div>
+      <div class="row"><span>总资产</span><span>{{ fmtBig(acquisitionDetail.totalAssets * 10000) }} 元</span></div>
+      <div class="row"><span>负债</span><span>{{ fmtBig(acquisitionDetail.liabilities * 10000) }} 元</span></div>
       <div class="row"><span>员工总数</span><span>{{ acquisitionDetail.employees }} 人</span></div>
-      <div class="row"><span>平均月净利润</span><span>{{ acquisitionDetail.averNetProfit }} 万元</span></div>
+      <div class="row"><span>平均月净利润</span><span>{{ fmtBig(acquisitionDetail.averNetProfit * 10000) }} 元</span></div>
       <div class="row" style="margin-top:10px;border-top:1px solid #21262d;padding-top:10px">
         <span>收购所需金额</span>
         <span style="color:#e6edf3;font-weight:700">{{ fmtBig((acquisitionDetail.totalAssets * 1.8 - acquisitionDetail.liabilities*0.5) * 10000) }}元</span>
@@ -1416,7 +1614,50 @@
       <div class="row"><span>当前净资产</span><span>{{ subsidiaryDetail.currentAssets }} 万元</span></div>
       <div class="row"><span>剩余负债（并入母公司）</span><span>{{ subsidiaryDetail.liabilitiesRemaining }} 万元</span></div>
       <div class="row"><span>上周盈利</span><span :class="pnlClass(subsidiaryDetail.weeklyIncome)">{{ subsidiaryDetail.weeklyIncome }} 万元</span></div>
-      <div v-if="subsidiaryDetail.liabilitiesRemaining > 0" style="margin-top:14px">
+      <div style="margin-top:14px;border-top:1px solid #21262d;padding-top:12px">
+        <div class="form-item">
+          <label>分配 CEO-首席执行官（周收益 +20%）</label>
+          <select :value="subsidiaryDetail.ceoId || ''" @change="assignSubCEO($event)"
+                  style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+            <option value="">未分配</option>
+            <option v-for="c in availableCEOs" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+        <div class="form-item">
+          <label>分配秘书（周收益 +6%）</label>
+          <select :value="subsidiaryDetail.secretaryId || ''" @change="assignSubSecretary($event)"
+                  style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+            <option value="">未分配</option>
+            <option v-for="s in availableSecretaries" :key="s.id" :value="s.id">{{ s.name }}</option>
+          </select>
+        </div>
+      </div>
+	  <div style="margin-top:16px;border-top:1px solid #21262d;padding-top:12px">
+	    <div style="font-size:13px;color:#8b949e;margin-bottom:8px">
+	      分派母公司员工（最多 10 人）
+	    </div>
+	    <div style="font-size:12px;color:#6e7681;margin-bottom:8px">
+	      当前营业额加成：<b style="color:#3fd07c">+{{ subAssignBonusPct }}%</b>
+	      · 已借调 {{ (subsidiaryDetail.assignedEmployees || []).length }} / 10 人
+	    </div>
+	    <div style="max-height:32vh;overflow-y:auto">
+	      <label v-for="e in availableSubEmployees" :key="e.id"
+	             style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #1c2128;cursor:pointer">
+	        <input type="checkbox"
+	               :checked="(subsidiaryDetail.assignedEmployees || []).includes(e.id)"
+	               @change="toggleSubEmployee(e.id)">
+	        <span>{{ e.name }}</span>
+	        <span style="font-size:12px;color:#8b949e">{{ e.position }}</span>
+	        <span style="margin-left:auto;font-size:12px;color:#6e7681">
+	          +{{ Math.round(e.salary / 5000) }}%
+	        </span>
+	      </label>
+	      <div v-if="availableSubEmployees.length === 0" class="empty" style="padding:16px 0">
+	        暂无可借调的普通员工
+	      </div>
+	    </div>
+	  </div>
+	  <div v-if="subsidiaryDetail.liabilitiesRemaining > 0" style="margin-top:14px">
         <div class="form-item">
           <label>偿还子公司负债（万元，剩余 {{ subsidiaryDetail.liabilitiesRemaining }} 万元）</label>
           <input v-model.number="subRepayInput" type="number" min="0" step="1"
@@ -1463,6 +1704,10 @@ const KEY = 'sim-stock-game-v1';
 const VERSION = 1;
 const DAILY_RATE = 0.08 / 365;   // 年利率 8%，按日复利
 const WEEK_LEN = 7;
+/* 金融业务：还款金额随年利率放大 */
+const REPAY_RATE_BASE = 12;          // 基准年利率
+const REPAY_RATE_SPAN = 68;          // 满量程 = 80 - 12
+const REPAY_RATE_SENSITIVITY = 2;  // 满量程还款乘数变化量
 const projectList = [
   {
     name: "深圳光明金地花园地产开发",
@@ -2571,7 +2816,7 @@ const PROPERTY_DEFAULT_CITY_PRICE = 27610;
 
 const PROPERTY_TYPES = {
   '办公楼':   { baseDays: 7,  buildPrice: 3620, color: '#1f6feb' },
-  '景区':     { baseDays: 15, buildPrice: 8256, color: '#3fd07c' },
+  '景区':     { baseDays: 15, buildPrice: 2256, color: '#3fd07c' },
   '商场':     { baseDays: 13, buildPrice: 6913, color: '#ff69b4' },
   '地产开发': { baseDays: 7,  buildPrice: 3306, color: '#a371f7' },
   '商业街':   { baseDays: 10, buildPrice: 4775, color: '#f5484d' },
@@ -2584,26 +2829,36 @@ const MANAGER_ROLE_DEFS = {
   '基金经理':   { level: 4, legal: false },
   '法务总监':   { level: 2, legal: true  },
   '法务主管':   { level: 4, legal: true  },
+  '首席财务官': { level: 1, legal: true  },
+  '首席执行官': { level: 1, legal: true  },
 };
 /* ==================== 产品研发 ==================== */
 const PRODUCT_TYPE_INFO = {
-  '食品饮料':         { color: '#3fd07c', tech: false },
-  '建筑建材':         { color: '#d29922', tech: false },
-  '体育建材':         { color: '#d29922', tech: false },
-  '文化教育':         { color: '#3fd07c', tech: false },
-  '医疗器械':         { color: '#a371f7', tech: true  },
-  '石油化工':         { color: '#d29922', tech: false },
-  '化工':             { color: '#d29922', tech: false },
-  '车辆':             { color: '#d29922', tech: false },
-  '车辆配件':         { color: '#d29922', tech: false },
-  '计算机软硬件':     { color: '#1f6feb', tech: true  },
-  '通信设备':         { color: '#1f6feb', tech: true  },
-  '服装':             { color: '#3fd07c', tech: false },
-  '半导体材料及芯片': { color: '#a371f7', tech: true  },
-  '玩具礼品':         { color: '#3fd07c', tech: false },
-  '家居用品':         { color: '#3fd07c', tech: false },
-  '包装':             { color: '#3fd07c', tech: false },
-  '办公用品':         { color: '#3fd07c', tech: false },
+  '食品饮料':         { color: '#3fd07c',maoli: 0.23, tech: false },
+  '建筑建材':         { color: '#d29922',maoli: 0.37, tech: false },
+  '体育建材':         { color: '#d29922',maoli: 0.39, tech: false },
+  '文化教育':         { color: '#3fd07c',maoli: 0.45, tech: false },
+  '医疗器械':         { color: '#a371f7',maoli: 0.27, tech: true  },
+  '石油化工':         { color: '#d29922',maoli: 0.23, tech: false },
+  '化工':             { color: '#d29922',maoli: 0.35, tech: false },
+  '车辆':             { color: '#d29922',maoli: 0.25, tech: false },
+  '车辆配件':         { color: '#d29922',maoli: 0.29, tech: false },
+  '计算机软硬件':     { color: '#1f6feb',maoli: 0.35, tech: true  },
+  '通信设备':         { color: '#1f6feb',maoli: 0.33, tech: true  },
+  '服装':             { color: '#3fd07c',maoli: 0.57, tech: false },
+  '半导体材料及芯片': { color: '#a371f7',maoli: 0.29, tech: true  },
+  '玩具礼品':         { color: '#3fd07c',maoli: 0.43, tech: false },
+  '家居用品':         { color: '#3fd07c',maoli: 0.37, tech: false },
+  '包装':             { color: '#3fd07c',maoli: 0.45, tech: false },
+  '办公用品':         { color: '#3fd07c',maoli: 0.47, tech: false },
+  '酒':         { color: '#aaffff',maoli: 0.83, tech: false },
+  '人工智能':         { color: '#ff4f0a',maoli: 0.3, tech: false },
+  '自动化设备':         { color: '#5555ff',maoli: 0.26, tech: false },
+  '服务器':         { color: '#6c6cff',maoli: 0.22, tech: false },
+  '电子产品':         { color: '#009dff',maoli: 0.21, tech: false },
+  '传媒产品':         { color: '#ff3d3d',maoli: 0.45, tech: false },
+  '美妆护肤':         { color: '#ff7272',maoli: 0.51, tech: false },
+  '奢侈品':         { color: '#aa049a',maoli: 0.75, tech: false },
 };
 const PRODUCT_TYPES_LIST = Object.keys(PRODUCT_TYPE_INFO);
 
@@ -2626,11 +2881,18 @@ function productRndDays(type) {
 function calcProductWeeklyRange(prod) {
   const totalInvestWan = (Number(prod.investWan) || 0) + (Number(prod.extraInvestWan) || 0);
   const investYuan = totalInvestWan * 10000;
-  let min = investYuan / 26;
+  let min = investYuan / 23;
   let max = investYuan / 13;
   const adYuan = (Number(prod.adFeeWan) || 0) * 10000;
   min += adYuan / 15;
   max += adYuan / 5;
+  Object.keys(PRODUCT_TYPE_INFO).forEach(e => {
+	  if(prod.type == e){	//毛利高，销售额减小
+	  	  max = max * (1.3 - PRODUCT_TYPE_INFO[e].maoli)
+		  min = min * (1.3 - PRODUCT_TYPE_INFO[e].maoli)
+	  }
+  })
+  
   return { min, max };
 }
 
@@ -2640,7 +2902,7 @@ function productFinishDate(prod) {
   return d;
 }
 function calcSalesWinterChance(company) {
-  let chance = 0.36;
+  let chance = 0.3;
   (company.employees || []).forEach(e => {
     if (e.type === 'staff' && ['生产工', '销售', '运营'].includes(e.position)) {
       chance -= 0.01;
@@ -2737,33 +2999,94 @@ function managerSalaryForRole(role) {
 }
 /* 普通员工职位 */
 const STAFF_POSITIONS = [
-  { name: '法务助理',   weight: 8 },
-  { name: '前端工程师', weight: 5 },
-  { name: '后端工程师', weight: 5 },
-  { name: '行政专员',   weight: 5 },
-  { name: '会计',       weight: 5 },
-  { name: '出纳',       weight: 5 },
-  { name: '财务助理',   weight: 5 },
-  { name: '生产工',     weight: 8 },
-  { name: '研发工程师', weight: 5 },
-  { name: '运营',       weight: 5 },
-  { name: '销售',       weight: 8 },
-  { name: '产品经理',   weight: 5 },
-  { name: '测试工程师', weight: 5 },
-  { name: '秘书',       weight: 5 },
-  { name: '文员',       weight: 5 },
-  { name: '项目经理',   weight: 5 },
-  { name: '前台',       weight: 3 },
-  { name: '交易员',     weight: 8 },
+  { name: '法务助理',   weight: 8, minSalary: 6000,  maxSalary: 9000  },
+  { name: '前端工程师', weight: 5, minSalary: 10000, maxSalary: 13000 },
+  { name: '后端工程师', weight: 5, minSalary: 11000, maxSalary: 18000 },
+  { name: '行政专员',   weight: 5, minSalary: 4000,  maxSalary: 7000  },
+  { name: '会计',       weight: 5, minSalary: 7000,  maxSalary: 12000 },
+  { name: '出纳',       weight: 5, minSalary: 5500,  maxSalary: 8500  },
+  { name: '财务助理',   weight: 5, minSalary: 5500,  maxSalary: 8000  },
+  { name: '生产工',     weight: 8, minSalary: 4000,  maxSalary: 6000  },
+  { name: '研发工程师', weight: 5, minSalary: 13000, maxSalary: 22000 },
+  { name: '运营',       weight: 5, minSalary: 7000,  maxSalary: 12000 },
+  { name: '销售',       weight: 8, minSalary: 6000,  maxSalary: 11000 },
+  { name: '产品经理',   weight: 5, minSalary: 10000, maxSalary: 15000 },
+  { name: '测试工程师', weight: 5, minSalary: 6000,  maxSalary: 9000 },
+  { name: '秘书',       weight: 5, minSalary: 6000,  maxSalary: 10000  },
+  { name: '文员',       weight: 5, minSalary: 4500,  maxSalary: 7000  },
+  { name: '项目经理',   weight: 5, minSalary: 10000, maxSalary: 15000 },
+  { name: '前台',       weight: 3, minSalary: 4500,  maxSalary: 6500  },
+  { name: '交易员',     weight: 8, minSalary: 10000, maxSalary: 15000 },
 ];
-
+const HEADSHOT_POOL = {
+  '中年男': [
+    'https://img2.baidu.com/it/u=3471706767,3655741776&fm=253&fmt=auto&app=120&f=JPEG?w=500&h=674', // 中年男-1
+    'https://img2.baidu.com/it/u=3211861944,3474775501&fm=253&fmt=auto&app=120&f=JPEG?w=800&h=1200', // 中年男-2
+    'https://img2.baidu.com/it/u=1344831273,1668815147&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=750', // 中年男-3
+    'https://pics4.baidu.com/feed/42166d224f4a20a491718cd2ae52382d720ed04c.jpeg@f_auto?token=df553ce5b68a821888bf976f5645c8e8', // 中年男-4
+    'https://q8.itc.cn/images01/20250524/eb974d528e0e44d78f1bf4b203f2f735.jpeg', // 中年男-5
+	'https://pics7.baidu.com/feed/5243fbf2b2119313b7fcab8afe0f6ed891238d17.jpeg@f_auto?token=e2891009dce0ed00202ef29c7d1712f4',
+	'https://t7.baidu.com/it/u=1107540403,2411248719&fm=193',
+	'https://img0.baidu.com/it/u=1345810286,993397208&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=500'
+  ],
+  '中年女': [
+    'https://gss0.baidu.com/-fo3dSag_xI4khGko9WTAnF6hhy/zhidao/pic/item/9825bc315c6034a8b00d29d3c1134954082376f1.jpg', // 中年女-1
+    'https://q7.itc.cn/q_70/images03/20260923/4c5b4d149e9a41eaa880cfb1fc5daacd.jpeg', // 中年女-2
+    'https://pic.rmb.bdstatic.com/bjh/240426/dd6d9f1e19cf4813e69837a96cf2088a5892.jpeg', // 中年女-3
+    'https://img2.baidu.com/it/u=76178362,3467027776&fm=253&app=138&f=JPEG?w=500&h=666', // 中年女-4
+    'https://qcloud.dpfile.com/pc/AUL-SNrS8xttFumvzxJUKHX3HIGjHXtTR5vPznB3UiSMLdZ21fUbS-AzRa0W0wPg.jpg',
+	'https://q8.itc.cn/q_70/images03/20250223/322c63f72af84385b219640e2def25c4.jpeg',
+	'https://pics4.baidu.com/feed/03087bf40ad162d9a4f6df60c191defc8a13cd15.jpeg@f_auto?token=190fa08ecc24cbe3ba91158f6a21cf3f',
+	'https://img0.baidu.com/it/u=3938628777,1715559558&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=525'
+  ],
+  '年轻男': [
+    'https://k.sinaimg.cn/n/sinakd/sni/370/w1170h1600/20250930/17e9-99e90076e9e67027fd832f147dd8b3f7.jpg/w700d1q75cms.jpg?by=cms_fixed_width', // 年轻男-1
+    'https://img0.baidu.com/it/u=2796591081,4265685041&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=747', // 年轻男-2
+    'https://k.sinaimg.cn/n/sinakd/sni/192/w720h1072/20250930/345b-9a612b88ab348b8e840825591b38e197.jpg/w700d1q75cms.jpg?by=cms_fixed_width', // 年轻男-3
+    'https://k.sinaimg.cn/n/sinakd20250623ac/382/w492h690/20250623/3877-c192d01068ac9fff6d864d7454f73691.jpg/w700d1q75cms.jpg?by=cms_fixed_width', // 年轻男-4
+    'https://img1.baidu.com/it/u=711678999,2931521719&fm=253&fmt=auto&app=138&f=JPEG?w=800&h=1067',
+	'https://img0.baidu.com/it/u=235488586,3305153803&fm=253&app=138&f=JPEG?w=500&h=500',
+	'https://img2.baidu.com/it/u=3372289730,4141814667&fm=253&fmt=auto&app=120&f=JPEG?w=500&h=667',
+	'https://img0.baidu.com/it/u=2673803107,3019620995&fm=253&app=138&f=JPEG?w=500&h=666'
+  ],
+  '年轻女': [
+    'https://img1.baidu.com/it/u=2248230180,1129025254&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=643', // 年轻女-1
+    'https://img1.baidu.com/it/u=4183050365,2126028818&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=692', // 年轻女-2
+    'https://img2.baidu.com/it/u=1675009417,1385775789&fm=253&app=138&f=JPEG?w=500&h=713', // 年轻女-3
+    'https://img2.baidu.com/it/u=575557674,3532179351&fm=253&app=138&f=JPEG?w=500&h=500', // 年轻女-4
+    'https://q6.itc.cn/q_70/images03/20260511/9261794b28fd4f8ea2051e063a5de08e.jpeg', // 年轻女-5
+	'https://b0.bdstatic.com/ugc/personal_page_creator/bcyBXb0puwvv4UbhQRNKhQe8f07bee775c44de71d50ae6194fd1ce.jpg',
+	'https://b0.bdstatic.com/ugc/personal_page_creator/L3RsnuWXctwKDdUSlepycw6a116495ca07a0959bfdd9e80ea14b92.jpg',
+	'https://preview.qiantucdn.com/58pic/6B/dN/1Z/jv1Y77b0isUEx6myFBhiSCCkFyyLkwtZn3_PIC2018.jpg!qt324new_nowater'
+  ],
+};
+/** 按性别 + 年龄选一组头像，组内随机取一张 */
+function pickAvatar(gender, age) {
+  const isMale = (gender === '男');
+    const isOld  = (Number(age) >= 35);
+    const group  = isOld ? (isMale ? '中年男' : '中年女')
+                         : (isMale ? '年轻男' : '年轻女');
+    const pool = HEADSHOT_POOL[group];
+    if (!pool || !pool.length) return '';
+    return pool[Math.floor(Math.random() * pool.length)] || '';
+}
 function randomStaffPosition() {
   let r = Math.random() * 100;
   for (const p of STAFF_POSITIONS) {
     r -= p.weight;
-    if (r < 0) return p.name;
+    if (r < 0) return p;
   }
-  return STAFF_POSITIONS[STAFF_POSITIONS.length - 1].name;
+  return STAFF_POSITIONS[STAFF_POSITIONS.length - 1];
+}
+
+/** 按职位名在 minSalary~maxSalary 之间随机，取整到 100 元 */
+function randomStaffSalary(positionName) {
+  const p = STAFF_POSITIONS.find(x => x.name === positionName);
+  if (!p || p.minSalary == null) {
+    return 5500 + randInt(0, 6) * 500;   // 兜底，兼容旧数据
+  }
+  const raw = p.minSalary + Math.random() * (p.maxSalary - p.minSalary);
+  return Math.round(raw / 100) * 100;
 }
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -2853,6 +3176,7 @@ function normalizeCompany(company) {
   if (!Array.isArray(company.properties)) company.properties = [];
   if (!Array.isArray(company.products)) company.products = [];
   if (!Array.isArray(company.acquisitions)) company.acquisitions = [];
+  if (!Array.isArray(company.pendingHires)) company.pendingHires = [];
   company.acquisitions.forEach(a => {
     if (a.weeklyIncome == null) a.weeklyIncome = 0;
     if (a.currentAssets == null) a.currentAssets = a.initialTotalAssets || 0;
@@ -2860,6 +3184,8 @@ function normalizeCompany(company) {
     if (a.lastWeekSettleDate == null) a.lastWeekSettleDate = a.acquiredAt || null;
     if (a.lastMonthSettleDate == null) a.lastMonthSettleDate = a.acquiredAt || null;
     if (!Array.isArray(a.reports)) a.reports = [];
+	if (a.ceoId == null) a.ceoId = null;
+	if (a.secretaryId == null) a.secretaryId = null;
     if (a.monthRevenueWan == null) a.monthRevenueWan = 0;
     if (a.totalProfitWan == null) a.totalProfitWan = 0;
   });
@@ -2872,7 +3198,19 @@ function normalizeCompany(company) {
       if (p.totalOperationFee == null)  p.totalOperationFee = 0;
       if (!p.status) p.status = '研发中';
       if (p.rndDays == null) p.rndDays = productRndDays(p.type);
+	  if (!Array.isArray(p.assignedEmployees)) p.assignedEmployees = [];
     });
+	// 清理已被删除员工的引用（解雇 / 主动离职后自动失效）
+	const empIds = new Set((company.employees || []).map(e => e.id));
+	company.products.forEach(p => {
+	  p.assignedEmployees = (p.assignedEmployees || []).filter(id => empIds.has(id));
+	});
+	(company.acquisitions || []).forEach(a => {
+	  if (a.ceoId && !empIds.has(a.ceoId)) a.ceoId = null;
+	  if (a.secretaryId && !empIds.has(a.secretaryId)) a.secretaryId = null;
+	  if (!Array.isArray(a.assignedEmployees)) a.assignedEmployees = [];
+	  a.assignedEmployees = a.assignedEmployees.filter(id => empIds.has(id));
+	});
   if (!company.finance.teamBuildByMonth) company.finance.teamBuildByMonth = {};
   if (!company.finance.perfByMonth) company.finance.perfByMonth = {};
   if (!company.lastTeamBuildMonth) company.lastTeamBuildMonth = '';
@@ -2884,6 +3222,27 @@ function normalizeCompany(company) {
   }
   if (!company.receivables) {
     company.receivables = { balance: 0, lastCollectDate: null };
+  }
+  if (!company.financeBusiness) {
+    company.financeBusiness = {
+      poolBalance: 0,
+      annualRate: 12,
+      totalInterestWan: 0,
+      badDebtWan: 0,
+      totalLentWan: 0,
+      lastSettleDate: null,
+      pendingLoans: [],
+      records: [],
+    };
+  } else {
+    const fb = company.financeBusiness;
+    if (fb.poolBalance == null) fb.poolBalance = 0;
+    if (fb.annualRate == null) fb.annualRate = 12;
+    if (fb.totalInterestWan == null) fb.totalInterestWan = 0;
+    if (fb.badDebtWan == null) fb.badDebtWan = 0;
+    if (fb.totalLentWan == null) fb.totalLentWan = 0;
+    if (!Array.isArray(fb.pendingLoans)) fb.pendingLoans = [];
+    if (!Array.isArray(fb.records)) fb.records = [];
   }
   if (!company.loan) company.loan = {};
   if (company.loan.startDate == null)    company.loan.startDate = null;
@@ -2913,6 +3272,11 @@ function normalizeCompany(company) {
       if (p.lastSettleDate == null) p.lastSettleDate = null;
     }
       if (!p.status) p.status = 'normal';   // ← 新增
+	  if (!p.avatar) {
+	    const g = (p.gender === '女') ? '女' : '男';
+	    const a = Number(p.age) || 30;
+	    p.avatar = pickAvatar(g, a);
+	  }
     if (!p.lastRaiseDate) p.lastRaiseDate = p.hireDate || null;
   };
   company.employees.forEach(fix);
@@ -2968,8 +3332,8 @@ function calcAccount(game) {
 }
 
 /* ---------------- 人才生成 ---------------- */
-const SURNAMES = ['王','李','张','萧','陈','杨','赵','黄','周','吴','徐','孙','马','朱','胡','郭','何','高','林','罗','郑','梁','谢','宋','唐','许','韩','冯','邓','曹','林','武','欧阳'];
-const GIVEN = ['金铭','竹','思','敏','静','楚歌','浩然','子伦','艾伦','若韩','勇','铭','明利','嫣','涛','盛','超','秋雁','平','刚','梧桐','厚','鹏宇','浩然','晨雨','思远','雅琪','子轩','高洋','山','云'];
+const SURNAMES = ['王','李','张','萧','陈','杨','赵','黄','周','吴','徐','孙','马','朱','胡','郭','何','高','林','罗','郑','梁','谢','宋','唐','许','韩','冯','邓','曹','林','武','欧阳','白','何','叶','金','刘','蓝','余'];
+const GIVEN = ['金铭','竹','思','敏','静','楚歌','浩然','子伦','艾伦','若韩','勇','铭','明利','嫣','涛','盛','超','秋雁','平','刚','梧桐','厚','鹏宇','浩然','晨雨','思远','雅琪','子轩','高洋','山','云','英','若曦','海','胜男','星星','无双','浩','雨','先','如','颖','菲'];
 const PROVINCES = [
   ['广东','深圳'],['广东','广州'],['浙江','杭州'],['江苏','南京'],['四川','成都'],
   ['湖北','武汉'],['湖南','长沙'],['福建','厦门'],['山东','青岛'],['北京','北京'],
@@ -2977,18 +3341,29 @@ const PROVINCES = [
 ];
 const SCHOOLS = ['清华大学','北京大学','复旦大学','上海交通大学','浙江大学','中山大学','武汉大学','广东财经大学','上海财经大学','华南理工大学','深圳大学','暨南大学','四川大学','厦门大学','浙江财经大学','中国人民大学','广州城市理工学院','北京交通大学'];
 const EVALS = [
-  '工作认真负责，具备良好的团队协作能力。',
-  '学习能力强，善于沟通，能承受较大工作压力。',
-  '有丰富的行业经验，逻辑清晰，执行力强。',
-  '性格开朗，积极主动，乐于接受挑战。',
+  '本人性格开朗、诚实正直、做事认真踏实、工作兢兢业业、有较强的组织能力、写作能力和团队协作精神，能迅速的适应各种环境并融合其中。自参加工作以来，所受到的教育及锻炼使我能够熟练的管理工作，能独立处理工作中出现的问题。',
+  '能快速的接受新知识，适应新环境； 在工作和学习中可以承担较大的压力并且拥有较高的责任感，为人处世中十分平易近人； 具备良好的沟通能力和团队协作能力，有团队精神，能快速融入新的团队。',
+  '乐观开朗，踏实努力，善于沟通和团队合作；合理的规划时间与协作分工，能够顾及整体的同时注重细节。',
+  '为人性格开朗，善于学习，认真细致，勇于进取，注重团队协作。懂业务、注重数据分析，做过数据可视化，关注新技术与行业应用。 善于分析问题并解决问题，善于沟通，注重团队协作，曾获得集团创新团队奖和多次优秀个人奖。',
   '做事细致耐心，责任心强，注重结果。',
   '具备较强的分析和解决问题的能力。',
+  '习惯用结果导向推进工作，坚决抵制无意义的办公室内耗，接到任务第一时间拆解节点同步给所有干系人，全程跟进闭环不会出现半分遗漏。',
+  'Born in Shanghai in 1996, I`m a cheerful and energetic boy with strong communication skills and interpersonal skills. Humorous, easy-going, honest, good team spirit. I have a strong sense of responsibility, good at learning and summarizing work experience, and have strong ability of self-study, hands-on ability and research and analysis. Nature likes art and have a certain artistic attainments, like exhibition, and combined with the feature of your passion of communication, marketing/business administration professional knowledge, the content of the work for enterprise marketing/IP agent has good fitneess and love.',
+  '我积极乐观，热爱生活，兴趣广泛，学习能力强，与同学们相处融洽，尊敬师长，以饱满的热情迎接每一天。工作中，尽心尽责。经过院里的工作历练，已经对各类办公软件熟练使用，有了较强的思考能力、办事能力、组织能力、管理能力和沟通能力，同时也有了较强的责任心、团结力，为以后能够更好的服务集体、社会打下坚实基础。',
+  '本人性格大方开朗，乐观向上，形象好，进取心强，具备良好的沟通和协调能力，富有团队合作精神。在工作中熟练掌握并运用办公软件，细心谨慎，吃苦耐劳，有高度的责任感，能独立开展工作，可承受一定的工作压力，勇于面对变化和挑战，同时能够把想法付诸于行动当中。',
+  '本人性格开朗、稳重、有活力，待人热情、真诚；工作认真负责，积极主动，能吃苦耐劳，用于承受压力，勇于创新；有很强的组织能力和团队协作精神，具有较强的适应能力；纪律性强，工作积极配合；意志坚强，具有较强的无私奉献精神。',
+  '本人性格开朗、为人诚恳、乐观向上、兴趣广泛、拥有较强的组织能力和适应能力、并具有较强的管理策划与 组织管理协调能力。 参与过多个上线应用的开发及系统设计。 能够对代码进行优化，能独立完成中小型项目 的设计与实现。',
+  '在校期间，本人曾担任班级团支书一职，获得山东省优秀毕业生、山东省政府励志奖学金的荣誉奖励，并在大二期间光荣地成为了一名中国共产党员，多次获校三好学生、校优秀团干部和校一等奖学金的荣誉称号。本人在积极的学习专业课知识和双学位学习的同时，锻炼了与人沟通和团结协作的能力，为人和善，能够完成好学校、老师和班级之间的工作分配，同时也曾在学生会任职，多次组织过班级和学校的活动，具有良好的组织协调能力。但本人在工作创新性方面还存在一些欠缺，在今后的工作和生活中都需要加强这方面的学习和锻炼，争取进一步的发展。',
+  '我坚持当天的事当天办，效率高一点；能办的事马上办，行动快一点；困难的事想法办，脑筋动一点；重要的事优先办，胆量大一点；份外的事协助做，理由少一点；琐碎的事条理办，做事做一点；限时的事按时办，执行好一点；复杂的事慎重办，办理妥一点；个人的事下班办，微笑露一点；所有的事认真办，信心足一点。',
+  '成熟稳重，有较强的责任心和进取心 ;能很好得与人沟通，具有团队合作精神;对负责的工作会付出100%精力和热情，制定缜密计划，力争在最短时间内将目标达成;喜欢挑战，能在较短时间内适应高压力的工作。除了拥有较为全面的专业知识和一定的实践经验，还具有较强的吃苦耐劳的精神。',
+  '本人恪守本分工作，虚心学习各项工作技能，愿意与团队合作与活动，学习能力强，通过任职的位置学习到各项知识，认真学习前辈所掌握的技能与尚未接触的新知识，努力上进。',
+  '作为一名预备党员，以全心全意为人民服务的宗旨。学习上，在目前学习阶段名列专业第二，也获得了两次校级奖一等学金和一次校友奖学金。也获得过“优秀学生干部”、“三好学生”、“班团之星”等荣誉称号。在科技中勇于突破，“挑战杯”大学生课外学术科技作品结题。力争在同学中起到先锋模范作用。能吃苦耐劳，勇于承受压力，勇于创新。'
 ];
 
 function genTalentMarket() {
   const list = [];
 
-  /* 高管：16 投资类 + 4 法务类 = 20 人 */
+  // ---------- 管理人员 ----------
   const managerRoles = [
     '总经理', '总经理',
     '投资顾问', '投资顾问', '投资顾问', '投资顾问',
@@ -2996,14 +3371,18 @@ function genTalentMarket() {
     '基金经理', '基金经理', '基金经理', '基金经理', '基金经理',
     '法务总监', '法务总监',
     '法务主管', '法务主管',
+    '首席财务官', '首席财务官',
+    '首席执行官', '首席执行官',
   ];
   managerRoles.forEach((role, i) => {
     const prov = PROVINCES[randInt(0, PROVINCES.length - 1)];
+    const gender = Math.random() < 0.6 ? '男' : '女';
+    const age = randInt(30, 55);
     list.push({
       id: 'M' + Date.now() + '_' + i,
       name: SURNAMES[randInt(0, SURNAMES.length - 1)] + GIVEN[randInt(0, GIVEN.length - 1)],
-      gender: Math.random() < 0.6 ? '男' : '女',
-      age: randInt(30, 55),
+      gender,
+      age,
       hometown: prov[0] + ' ' + prov[1],
       school: SCHOOLS[randInt(0, SCHOOLS.length - 1)],
       selfEval: EVALS[randInt(0, EVALS.length - 1)],
@@ -3016,25 +3395,30 @@ function genTalentMarket() {
       lastIncomeDate: null,
       lastWeekIncome: 0,
       status: 'normal',
+      avatar: pickAvatar(gender, age),
     });
   });
 
-  /* 普通员工：50 人 */
+  // ---------- 普通员工 ----------
   for (let i = 0; i < 50; i++) {
     const prov = PROVINCES[randInt(0, PROVINCES.length - 1)];
+    const gender = Math.random() < 0.55 ? '男' : '女';
+    const age = randInt(22, 45);
+	const posInfo = randomStaffPosition();
     list.push({
       id: 'S' + Date.now() + '_' + i,
       name: SURNAMES[randInt(0, SURNAMES.length - 1)] + GIVEN[randInt(0, GIVEN.length - 1)],
-      gender: Math.random() < 0.55 ? '男' : '女',
-      age: randInt(22, 45),
+      gender,
+      age,
       hometown: prov[0] + ' ' + prov[1],
       school: SCHOOLS[randInt(0, SCHOOLS.length - 1)],
       selfEval: EVALS[randInt(0, EVALS.length - 1)],
       type: 'staff',
-      position: randomStaffPosition(),
-      salary: 5500 + randInt(0, 6) * 500,
+      position: posInfo.name,
+      salary: randomStaffSalary(posInfo.name),
       dailyIncome: 0,
       status: 'normal',
+      avatar: pickAvatar(gender, age),
     });
   }
 
@@ -3113,6 +3497,42 @@ createApp({
       acquisitionDetail: null,
       subsidiaryDetail: null,
       subRepayInput: 0,
+	  minArea: 600,
+	  maoli: 0.7,
+	  financeInject: 0,
+	  financeRate: 12,
+	  financeWithdraw: 0,
+	  financePage: 1,
+	  acquisitionPage: 1,
+	  monthlyZoom: null,
+	  quarterlyZoom: null,
+	  productType: {
+	    '食品饮料':         { color: '#3fd07c',maoli: 0.23, tech: false },
+	    '建筑建材':         { color: '#d29922',maoli: 0.37, tech: false },
+	    '体育建材':         { color: '#d29922',maoli: 0.39, tech: false },
+	    '文化教育':         { color: '#3fd07c',maoli: 0.45, tech: false },
+	    '医疗器械':         { color: '#a371f7',maoli: 0.27, tech: true  },
+	    '石油化工':         { color: '#d29922',maoli: 0.23, tech: false },
+	    '化工':             { color: '#d29922',maoli: 0.35, tech: false },
+	    '车辆':             { color: '#d29922',maoli: 0.25, tech: false },
+	    '车辆配件':         { color: '#d29922',maoli: 0.29, tech: false },
+	    '计算机软硬件':     { color: '#1f6feb',maoli: 0.35, tech: true  },
+	    '通信设备':         { color: '#1f6feb',maoli: 0.33, tech: true  },
+	    '服装':             { color: '#3fd07c',maoli: 0.57, tech: false },
+	    '半导体材料及芯片': { color: '#a371f7',maoli: 0.29, tech: true  },
+	    '玩具礼品':         { color: '#3fd07c',maoli: 0.43, tech: false },
+	    '家居用品':         { color: '#3fd07c',maoli: 0.37, tech: false },
+	    '包装':             { color: '#3fd07c',maoli: 0.45, tech: false },
+	    '办公用品':         { color: '#3fd07c',maoli: 0.47, tech: false },
+	    '酒':         { color: '#aaffff',maoli: 0.83, tech: false },
+	    '人工智能':         { color: '#ff4f0a',maoli: 0.3, tech: false },
+	    '自动化设备':         { color: '#5555ff',maoli: 0.26, tech: false },
+	    '服务器':         { color: '#6c6cff',maoli: 0.22, tech: false },
+	    '电子产品':         { color: '#009dff',maoli: 0.21, tech: false },
+	    '传媒产品':         { color: '#ff3d3d',maoli: 0.45, tech: false },
+	    '美妆护肤':         { color: '#ff7272',maoli: 0.51, tech: false },
+	    '奢侈品':         { color: '#aa049a',maoli: 0.75, tech: false },
+	  }
     };
   },
 
@@ -3135,15 +3555,20 @@ createApp({
     },
     loanLimit() {
       const n = this.netAssets;
-      if (n < 10000) return 80000;
-      if (n < 20000) return 150000;
-      if (n < 30000) return 300000;
-      if (n < 50000) return 500000;
-      if (n < 80000) return 700000;
-      if (n < 150000) return 1300000;
-      if (n < 350000) return 1800000;
-      if (n < 650000) return 2300000;
-      return 5000000;
+	   let base = 80000;
+	    if (n < 10000)         base = 80000;
+	    else if (n < 20000)    base = 150000;
+	    else if (n < 30000)    base = 300000;
+	    else if (n < 50000)    base = 500000;
+	    else if (n < 80000)    base = 700000;
+	    else if (n < 150000)   base = 1300000;
+	    else if (n < 350000)   base = 1800000;
+		else if (n < 650000)   base = 2300000;
+	    else                   base = 5000000;
+	  // 每位首席财务官 +300 万借款额度
+	  const cfoCount = (this.company?.employees || [])
+		.filter(e => e.type === 'manager' && e.role === '首席财务官').length;
+	  return base + cfoCount * 3000000;
     },
     sortedReports() {
       if (!this.company || !this.company.finance.reports) return [];
@@ -3188,8 +3613,12 @@ createApp({
     },
     managerHireBlocked() {
       if (!this.company) return false;
-      const managers = this.company.employees.filter(e => e.type === 'manager').length;
-      const staffs   = this.company.employees.filter(e => e.type === 'staff').length;
+      const all = [
+        ...(this.company.employees || []),
+        ...(this.company.pendingHires || []),
+      ];
+      const managers = all.filter(e => e.type === 'manager').length;
+      const staffs   = all.filter(e => e.type === 'staff').length;
       return staffs < managers * 4;
     },
     hrTabs() {
@@ -3272,7 +3701,11 @@ createApp({
     },
     propertyLandCost() {
       const area = Number(this.propertyForm.area) || 0;
-      return round2(this.propertyLandUnitPrice * area);
+	  let cost = round2(this.propertyLandUnitPrice * area)
+	  if(this.propertyForm.type == '景区'){
+		  cost = cost*0.2
+	  }
+      return cost;
     },
     propertyBuildingUnitPrice() {
       const t = PROPERTY_TYPES[this.propertyForm.type];
@@ -3391,6 +3824,8 @@ createApp({
         { name: '股票投资收益', value: this.stockTotalProfit },
         { name: '置业资产收益', value: this.propertyTotalIncome },
         { name: '产品净利润', value: this.productNetProfit },
+		{ name: '子公司净利润',   value: round2(this.subsidiaryTotalProfit * 10000) },
+		{ name: '金融业务收入',   value: round2(this.financeTotalInterest * 10000) },
       ];
     },
     companyReceivables() {
@@ -3400,10 +3835,17 @@ createApp({
       // const acquisitionYuan = this.acquisitionAssetsYuan;
       return round2((this.account?.totalAssets || 0) + this.companyReceivables);
     },
-    availableAcquisitions() {
+    availableAcquisitionsAll() {
       if (!this.company) return companyList;
       const owned = new Set((this.company.acquisitions || []).map(a => a.id));
       return companyList.filter(c => !owned.has(c.id));
+    },
+    pagedAcquisitions() {
+      const start = (this.acquisitionPage - 1) * 10;
+      return this.availableAcquisitionsAll.slice(start, start + 10);
+    },
+    totalAcquisitionPages() {
+      return Math.max(1, Math.ceil(this.availableAcquisitionsAll.length / 10));
     },
     acquisitionRevenueWeekly() {
       return round2((this.company?.acquisitions || []).reduce((s, a) => s + (a.weeklyIncome || 0), 0));
@@ -3490,6 +3932,120 @@ createApp({
       });
       return Math.max(0.15, chance);
     },
+	pendingHiresCount() {
+	  return (this.company?.pendingHires || []).length;
+	},
+	productAssignedIds() {
+	  const set = new Set();
+	  (this.company?.products || []).forEach(p => {
+	    (p.assignedEmployees || []).forEach(id => set.add(id));
+	  });
+	  return set;
+	},
+	availableProductEmployees() {
+	  if (!this.company) return [];
+	  const assigned = this.productAssignedIds;
+	  const currentAssigned = new Set(this.productDetail?.assignedEmployees || []);
+	  return (this.company.employees || []).filter(e => {
+	    if (e.type !== 'staff') return false;
+	    if (!['销售', '生产工', '产品经理', '运营'].includes(e.position)) return false;
+	    if (e.status !== 'normal') return false;          // 出差中不可分配
+	    if (assigned.has(e.id) && !currentAssigned.has(e.id)) return false;  // 已被其他产品占用
+	    return true;
+	  });
+	},
+	availableCEOs() {
+	  if (!this.company) return [];
+	  const currentId = this.subsidiaryDetail?.ceoId || null;
+	  const used = new Set();
+	  (this.company.acquisitions || []).forEach(a => {
+	    if (a.ceoId && a.ceoId !== currentId) used.add(a.ceoId);
+	  });
+	  return (this.company.employees || []).filter(e =>
+	    e.type === 'manager' && e.role === '首席执行官' && !used.has(e.id)
+	  );
+	},
+	availableSecretaries() {
+	  if (!this.company) return [];
+	  const currentId = this.subsidiaryDetail?.secretaryId || null;
+	  const used = new Set();
+	  (this.company.acquisitions || []).forEach(a => {
+	    if (a.secretaryId && a.secretaryId !== currentId) used.add(a.secretaryId);
+	  });
+	  return (this.company.employees || []).filter(e =>
+	    e.type === 'staff' && e.position === '秘书' && !used.has(e.id)
+	  );
+	},
+	availableSubEmployees() {
+	  if (!this.company || !this.subsidiaryDetail) return [];
+	  const currentAssigned = new Set(this.subsidiaryDetail.assignedEmployees || []);
+	  return (this.company.employees || []).filter(e => {
+	    if (e.type !== 'staff') return false;
+	    // 出差中 / 已借调（且不在当前子公司）不可选
+	    if (e.status !== 'normal' && !currentAssigned.has(e.id)) return false;
+	    return true;
+	  });
+	},
+	subAssignBonusPct() {
+	  if (!this.subsidiaryDetail) return 0;
+	  let pct = 0;
+	  (this.subsidiaryDetail.assignedEmployees || []).forEach(id => {
+	    const emp = (this.company?.employees || []).find(e => e.id === id);
+	    if (emp && emp.salary) pct += Math.round(emp.salary / 5000);
+	  });
+	  return pct;
+	},
+	subsidiaryTotalProfit() {
+	  if (!this.company) return 0;
+	  let sum = 0;
+	  (this.company.acquisitions || []).forEach(a => {
+	    (a.reports || []).forEach(r => { sum += Number(r.profit) || 0; });
+	  });
+	  return round2(sum);   // 万元
+	},
+	earliestHireDays() {
+	  if (!this.company) return 1;
+	  const adminCount = (this.company.employees || []).filter(
+	    e => e.type === 'staff' && e.position === '行政专员'
+	  ).length;
+	  return Math.max(1, 1 - adminCount * 2);
+	},
+	latestHireDays() {
+	  if (!this.company) return 15;
+	  const adminCount = (this.company.employees || []).filter(
+	    e => e.type === 'staff' && e.position === '行政专员'
+	  ).length;
+	  return Math.max(1, 15 - adminCount * 2);
+	},
+	financeBusiness() {
+	  return this.company?.financeBusiness || null;
+	},
+	financePoolBalance() {
+	  return round2(this.financeBusiness?.poolBalance || 0);
+	},
+	financeTotalLent() {
+	  return round2(this.financeBusiness?.totalLentWan || 0);
+	},
+	financeBadDebt() {
+	  return round2(this.financeBusiness?.badDebtWan || 0);
+	},
+	financeTotalInterest() {
+	  return round2(this.financeBusiness?.totalInterestWan || 0);
+	},
+	financeRecordsDesc() {
+	  return [...(this.financeBusiness?.records || [])].reverse();
+	},
+	pagedFinanceRecords() {
+	  const start = (this.financePage - 1) * 10;
+	  return this.financeRecordsDesc.slice(start, start + 10);
+	},
+	totalFinancePages() {
+	  return Math.max(1, Math.ceil(this.financeRecordsDesc.length / 10));
+	},
+	financeUnpaidLoans() {
+	  const list = this.financeBusiness?.pendingLoans || [];
+	  return round2(list.reduce((s, l) => s + Math.max(0, (l.amount || 0) - (l.badDebt || 0)), 0));
+	},
   },
   watch: {
     tab(val) {
@@ -3598,7 +4154,7 @@ createApp({
       return (this.company.investments || []).some(inv => inv.projectName === name);
     },
     isEmployeeOnTrip(emp) {
-      return emp.status === 'business';
+      return emp.status !== 'normal';
     },
     openInvestModal(project) {
       if (this.isProjectInvested(project.name)) return this.showToast('该项目已投资');
@@ -3745,10 +4301,12 @@ createApp({
         if (company) {
           if (this.accrueInterest(company, game))        companyDirty = true;
           if (this.settleLoanCollection(company, game)) { companyDirty = true; }
+		  if (this.settlePendingHires(company, game)) { companyDirty = true; }
           if (this.settleManagerIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleProjectIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settlePropertyIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleProductIncome(company, game)) { companyDirty = true; gameDirty = true; }
+		  if (this.settleFinanceBusiness(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleAcquisitions(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleReceivables(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.settleTeamBuild(company, game))    { companyDirty = true; gameDirty = true; }
@@ -3770,7 +4328,16 @@ createApp({
         }
 
         if (company) this.checkSalaryRaise();
-        if (this.tab === 'company' || this.tab === 'finance') this.renderCharts();
+        if (this.tab === 'company') this.renderCharts();
+        if (this.tab === 'finance') {
+          const mLen = this.monthlyChartData.length;
+          const qLen = this.quarterlyChartData.length;
+          if (mLen !== this._lastMonthlyLen || qLen !== this._lastQuarterlyLen) {
+            this._lastMonthlyLen = mLen;
+            this._lastQuarterlyLen = qLen;
+            this.renderCharts();
+          }
+        }
         if (this.game && !this._timer) this.startClock();
       },
 
@@ -3973,10 +4540,21 @@ createApp({
 
           if (currentDate >= deadlineDate) {
             inv.status = 'ended';
+            if (!inv.endedAt) inv.endedAt = currentStr;
             (inv.assignedEmployees || []).forEach(id => {
               const emp = company.employees.find(e => e.id === id);
               if (emp) emp.status = 'normal';
             });
+			// 已结束满 30 天的项目从「已投资」中移除，恢复可再次投资
+			const beforeLen = company.investments.length;
+			company.investments = company.investments.filter(inv => {
+			  if (inv.status === 'ended' && inv.endedAt) {
+			    const end = new Date(inv.endedAt);
+			    if (!isNaN(end.getTime()) && dayDiff(end, currentDate) >= 30) return false;
+			  }
+			  return true;
+			});
+			if (company.investments.length !== beforeLen) changed = true;
           }
         });
 
@@ -4076,14 +4654,16 @@ createApp({
           }
 
           while (dayDiff(lastSettle, currentDate) >= 7) {
-            // 产品运营费：研发费用 × 2%~3%
+            // 产品运营费：研发费用 × 0.8%~1.3%
             const rndCost = (Number(prod.investWan) || 0) * 10000;
-            const opFee = Math.round(rndCost * rand(0.02, 0.04));
+            const opFee = Math.round(rndCost * rand(0.008, 0.013));
             let yunyinNum = 0
-              company.employees.forEach(e => {
-                if (e.position === '运营' && yunyinNum < 8) {
-                  yunyinNum += 1
-                }
+              prod.assignedEmployees.forEach(e => {
+              	company.employees.forEach(i=>{
+					if (e == i.id && i.position === '运营' && yunyinNum < 8) {
+					  yunyinNum += 1
+					}
+				})
               });
             let opFee2 = round2(opFee * (1 - 0.08 * yunyinNum)+9000)
             game.cash = round2((Number(game.cash) || 0) - opFee2);
@@ -4093,26 +4673,36 @@ createApp({
             // 收益
             const range = calcProductWeeklyRange(prod);
             let amount = rand(range.min, range.max);
-            //招募销售和生产工，产品收益增加
-            let staffnum = 0
-            company.employees.forEach(e => {
-              if (e.position === '销售') {
-                if(staffnum < 30) staffnum += 2
-              }
-              if(e.position === '生产工'){
-                if(staffnum < 30) staffnum += 1
-              }
-              if(e.position === '产品经理'){
-                if(staffnum < 30) staffnum += 1
-              }
-            });
-            //产品收益增加，最多2.2倍
-            amount = amount * (1+staffnum*0.04)
-            // 销售寒冬：命中后收入 ×0.4
-            if (Math.random() < winterChance) amount *= 0.15;
+			//招募销售和生产工，产品收益增加
+			let staffnum = 0
+			prod.assignedEmployees.forEach(e => {
+				company.employees.forEach(i=>{
+					if (e == i.id && i.position == '销售') {
+						if(staffnum < 30) staffnum += 2
+					}
+					if (e == i.id && i.position == '生产工') {
+						if(staffnum < 30) staffnum += 1
+					}
+					if (e == i.id && i.position == '产品经理') {
+						if(staffnum < 30) staffnum += 1
+					}
+				})
+			});
+			//产品收益增加，最多2.2倍
+			amount = amount * (1+staffnum*0.04)
+			// 销售寒冬：命中后收入 ×0.3
+			if (Math.random() < winterChance) amount *= 0.3;
+			
+			let weeklySellMoney = amount
+			Object.keys(PRODUCT_TYPE_INFO).forEach(e => {
+				  if(prod.type == e){	
+					amount = amount - amount*(1 - PRODUCT_TYPE_INFO[e].maoli) //扣除毛利的成本
+				  }
+			  })
             
             amount = round2(amount);
             prod.weeklyIncome = amount;
+			prod.weeklySellMoney = weeklySellMoney;
             prod.totalIncome = round2((prod.totalIncome || 0) + amount);
             game.cash = round2((Number(game.cash) || 0) + amount);
 
@@ -4124,6 +4714,143 @@ createApp({
 
         return changed;
       },
+	  settleFinanceBusiness(company, game) {
+	    const currentDate = new Date(game.currentDate);
+	    const currentStr = fmtDate(currentDate);
+	    const fb = company.financeBusiness;
+	  
+	    if (!fb.lastSettleDate) {
+	      fb.lastSettleDate = currentStr;
+	      return true;
+	    }
+	    const last = new Date(fb.lastSettleDate);
+	    if (isNaN(last.getTime())) { fb.lastSettleDate = currentStr; return true; }
+	  
+	    const days = dayDiff(last, currentDate);
+	    if (days <= 0) return false;
+	  
+	    let changed = false;
+	  
+	    for (let d = 1; d <= days; d++) {
+	      const settleDate = new Date(last);
+	      settleDate.setDate(settleDate.getDate() + d);
+	      const settleStr = fmtDate(settleDate);
+	  
+	      // ---------- 1. 到期贷款全额返还（扣除赖账部分）----------
+	      let dueRepaid = 0;
+	      const remainLoans = [];
+	      fb.pendingLoans.forEach(loan => {
+	        if (loan.dueDate <= settleStr) {
+	          dueRepaid += Math.max(0, (loan.amount || 0) - (loan.badDebt || 0));
+	        } else {
+	          remainLoans.push(loan);
+	        }
+	      });
+	      fb.pendingLoans = remainLoans;
+	  
+	      // ---------- 2. 每日客户主动还款 ----------
+	      // 基数 = 当前未还贷款有效额合计；还完为 0 时不再产生还款
+	      let unpaid = 0;
+	      fb.pendingLoans.forEach(loan => {
+	        unpaid += Math.max(0, (loan.amount || 0) - (loan.badDebt || 0));
+	      });
+	      unpaid = round2(unpaid);
+	  
+	      let dailyRepay = 0;
+	      if (unpaid > 0) {
+	        // 利率越高，还款越快：基准 12% = 1 倍，80% = 2.5 倍，2% = 0.78 倍
+	        const rateFactor = 1 + (fb.annualRate - REPAY_RATE_BASE) / REPAY_RATE_SPAN * REPAY_RATE_SENSITIVITY;
+	        const rawRepay = rand(unpaid / 108, unpaid / 78) * rateFactor;
+	        dailyRepay = round2(Math.max(0, rawRepay));
+	        if (dailyRepay > unpaid) dailyRepay = unpaid;
+	      
+	        // 从最早到期的贷款开始扣减（以下逻辑不变）
+	        let remainRepay = dailyRepay;
+	        const nextLoans = [];
+	        fb.pendingLoans.forEach(loan => {
+	          if (remainRepay <= 0) { nextLoans.push(loan); return; }
+	          const effective = Math.max(0, (loan.amount || 0) - (loan.badDebt || 0));
+	          if (effective <= remainRepay) {
+	            remainRepay = round2(remainRepay - effective);
+	          } else {
+	            loan.amount = round2(loan.amount - remainRepay);
+	            remainRepay = 0;
+	            nextLoans.push(loan);
+	          }
+	        });
+	        fb.pendingLoans = nextLoans;
+	      }
+	  
+	      // 当天还款总额 = 到期返还 + 主动还款
+	      const totalRepaid = round2(dueRepaid + dailyRepay);
+	      fb.poolBalance = round2(fb.poolBalance + totalRepaid);
+	  
+	      // ---------- 3. 当日贷出（逻辑不变）----------
+	      let lent = 0;
+	      let badDebt = 0;
+	      if (fb.poolBalance >= 50) {
+	        const minRaw = Math.max(0, 5 + fb.poolBalance / 96 - fb.annualRate / 8);
+	        const maxRaw = 8 + fb.poolBalance / 70;
+	        const lo = Math.min(minRaw, maxRaw);
+	        const hi = Math.max(minRaw, maxRaw);
+	        const raw = lo + Math.random() * (hi - lo);
+	        lent = round2(raw * (1 - fb.annualRate / 100));
+	        if (lent > fb.poolBalance) lent = fb.poolBalance;
+	        if (lent < 0) lent = 0;
+	  
+	        if (lent > 0) {
+	          if (Math.random() < 0.15) {
+	            badDebt = round2(lent * (0.10 + Math.random() * 0.25));
+	            fb.badDebtWan = round2(fb.badDebtWan + badDebt);
+	            const addToReceivable = round2(badDebt * 0.7 * 10000);
+	            if (addToReceivable > 0) {
+	              company.receivables.balance = round2(company.receivables.balance + addToReceivable);
+	            }
+	          }
+	  
+	          fb.poolBalance = round2(fb.poolBalance - lent);
+	          fb.totalLentWan = round2(fb.totalLentWan + lent);
+	  
+	          const due = new Date(settleDate);
+	          due.setDate(due.getDate() + 30);
+	          fb.pendingLoans.push({
+	            dueDate: fmtDate(due),
+	            amount: lent,
+	            badDebt,
+	          });
+	        }
+	      }
+	  
+	      // ---------- 4. 每日利息（基于未还贷款有效额）----------
+	      let effectiveLoan = 0;
+	      fb.pendingLoans.forEach(loan => {
+	        effectiveLoan += Math.max(0, (loan.amount || 0) - (loan.badDebt || 0));
+	      });
+	      const interestWan = effectiveLoan * (fb.annualRate / 100) / 365;
+	      const interestYuan = Math.round(interestWan * 10000);
+	      fb.totalInterestWan = round2(fb.totalInterestWan + interestWan);
+	      fb.poolBalance = round2(fb.poolBalance + interestWan);
+	  
+	      // ---------- 5. 赖账金额按年利率计息 ----------
+	      if (fb.badDebtWan > 0) {
+	        fb.badDebtWan = round2(fb.badDebtWan * (1 + fb.annualRate / 100 / 365));
+	      }
+	  
+	      // ---------- 6. 记录 ----------
+	      fb.records.push({
+	        date: settleStr,
+	        lent: round2(lent),
+	        repaid: totalRepaid,
+	        interestYuan,
+	      });
+	      if (fb.records.length > 120) fb.records = fb.records.slice(-120);
+	  
+	      changed = true;
+	    }
+	  
+	    fb.lastSettleDate = currentStr;
+	    return changed;
+	  },
       settleAcquisitions(company, game) {
         const currentDate = new Date(game.currentDate);
         const currentStr = fmtDate(currentDate);
@@ -4152,7 +4879,18 @@ createApp({
             if (minWan > maxWan) { const t = minWan; minWan = maxWan; maxWan = t; }
 
             let income = rand(minWan, maxWan);
-            if (Math.random() < 0.3) income *= 0.5;   // 困难期
+            if (Math.random() < 0.3) income *= 0.4;   // 困难期
+			if (sub.ceoId)       income *= 1.2;   // CEO 加成 +20%
+			if (sub.secretaryId) income *= 1.06;   // 秘书加成 +6%
+			// 借调员工营业额加成：每人 +Math.round(salary/5000)%
+			if (Array.isArray(sub.assignedEmployees) && sub.assignedEmployees.length > 0) {
+			  let bonusPct = 0;
+			  sub.assignedEmployees.forEach(id => {
+			    const emp = (company.employees || []).find(e => e.id === id);
+			    if (emp && emp.salary) bonusPct += Math.round(emp.salary / 5000);
+			  });
+			  if (bonusPct > 0) income *= (1 + bonusPct / 100);
+			}
             income = round2(income);
 
             sub.weeklyIncome = income;
@@ -4185,7 +4923,7 @@ createApp({
             const perSalaryWan = 1 + (sub.initialTotalAssets || 0) * 0.001;
             const salaryWan = round2(empCount * perSalaryWan);
             //子公司营业成本
-            const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.3));
+            const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.18));
             const costWan = round2(salaryWan + opCostWan);
             const profitWan = round2(revenue - costWan);
 
@@ -4251,6 +4989,39 @@ createApp({
         recv.lastCollectDate = currentStr;
         return true;
       },
+	  settlePendingHires(company, game) {
+	    if (!Array.isArray(company.pendingHires) || company.pendingHires.length === 0) return false;
+	    const currentDate = new Date(game.currentDate);
+	    const still = [];
+	    let changed = false;
+	  
+	    company.pendingHires.forEach(p => {
+	      const due = new Date(p.expectHireDate);
+	      if (!isNaN(due.getTime()) && currentDate >= due) {
+	        const hireDate = p.expectHireDate;
+	        company.employees.push({
+	          ...p,
+	          hireDate,
+	          lastRaiseDate: hireDate,
+	          status: 'normal',
+	          dailyIncome: p.type === 'manager' ? 0 : undefined,
+	          ...(p.type === 'manager' ? {
+	            incomeLog: [],
+	            lastIncomeDate: hireDate,
+	            lastWeekIncome: 0,
+	          } : {}),
+	        });
+	        const roleLabel = p.type === 'manager' ? ('管理 · ' + (p.role || '基金经理')) : (p.position || '普通员工');
+	        this._pendingNotices.push(`${p.name}（${roleLabel}）已入职`);
+	        changed = true;
+	      } else {
+	        still.push(p);
+	      }
+	    });
+	  
+	    company.pendingHires = still;
+	    return changed;
+	  },
       settleTeamBuild(company, game) {
         const currentDate = new Date(game.currentDate);
         const currentMonth = fmtMonth(currentDate);
@@ -4299,10 +5070,6 @@ createApp({
           this._pendingNotices.push(
             `发放员工绩效奖金 ${paid.toLocaleString()} 元`
           );
-        } else {
-          this._pendingNotices.push(
-            `本期绩效奖金未发放（净资产低于 30 万）`
-          );
         }
 
         const n = new Date(company.nextPerfDate);
@@ -4348,7 +5115,7 @@ createApp({
         const salary = active.reduce((s, e) => s + e.salary, 0);
 
         // ---------- 场地费 ----------
-        const rent = headcount < 10 ? 10000 : headcount < 20 ? 15000 : headcount < 50 ? 30000 : 80000;
+        const rent = headcount < 10 ? 10000 : headcount < 20 ? 30000 : headcount < 50 ? 50000 : 50000 + headcount*600;
 
         // ---------- 水电及其他 ----------
         const utilities = Math.round(rand(2500, 7000)) + this.productList.length*7500 + co.employees.length*500;
@@ -4710,6 +5477,18 @@ createApp({
           receivableConfig: { rate: 0.05, chance: 0.5 },
           products: [],
           acquisitions: [],
+		  pendingHires: [],
+		  assignedEmployees: [],
+		  financeBusiness: {
+		    poolBalance: 0,
+		    annualRate: 12,
+		    totalInterestWan: 0,
+		    badDebtWan: 0,
+		    totalLentWan: 0,
+		    lastSettleDate: null,
+		    pendingLoans: [],
+		    records: [],
+		  },
         };
 
         writeCompany(company);
@@ -4875,7 +5654,10 @@ createApp({
         if (!f.city) return this.showToast('请选择城市');
         if (!f.detailAddress.trim()) return this.showToast('请填写详细地址');
         const area = Number(f.area);
-        if (!(area >= 600)) return this.showToast('建筑面积最低 600 平方米');
+		if(f.type == '景区'){
+			this.minArea = 3000
+		}
+        if (!(area >= this.minArea)) return this.showToast(f.type+'建筑面积最低 '+this.minArea+' 平方米');
 
         const game = readGame();
         const company = normalizeCompany(readCompany());
@@ -5048,25 +5830,47 @@ createApp({
             return this.showToast(`每名高管需配至少 4 名普通员工，还需再招 ${need} 名普通员工才能招聘新高管`);
           }
         }
-
+		if (person.role === '首席财务官') {
+		  const all = [...(company.employees || []), ...(company.pendingHires || [])];
+		  const cfoCount = all.filter(e => e.role === '首席财务官').length;
+		  if (cfoCount >= 3) return this.showToast('首席财务官最多只能招聘 3 位');
+		}
+		// 计算入职日期：1~15 天随机，行政专员每人 −2 天，最短 1 天
+		const today = new Date(game.currentDate);
+		const adminCount = company.employees.filter(
+		  e => e.type === 'staff' && e.position === '行政专员'
+		).length;
+		let days = randInt(1, 15) - adminCount * 2;
+		if (days < 1) days = 1;
+		const expect = new Date(today);
+		expect.setDate(expect.getDate() + days);
+		const expectStr = fmtDate(expect);
+		
+		company.talentMarket = company.talentMarket.filter(p => p.id !== person.id);
+		company.pendingHires.push({
+		  ...person,
+		  avatar: person.avatar || pickAvatar(person.gender || '男', person.age || 30),
+		  applyDate: fmtDate(today),
+		  expectHireDate: expectStr,
+		});
         company.talentMarket = company.talentMarket.filter(p => p.id !== person.id);
         const hireDate = fmtDate(new Date(game.currentDate));
-        company.employees.push({
-          ...person,
-          hireDate,
-          lastRaiseDate: hireDate,
-          dailyIncome: person.type === 'manager' ? 0 : undefined,
-          ...(person.type === 'manager' ? {
-            incomeLog: [],
-            lastIncomeDate: hireDate,
-            lastWeekIncome: 0,
-          } : {}),
-        });
+        // company.employees.push({
+        //   ...person,
+        //   hireDate,
+        //   lastRaiseDate: hireDate,
+        //   dailyIncome: person.type === 'manager' ? 0 : undefined,
+        //   ...(person.type === 'manager' ? {
+        //     incomeLog: [],
+        //     lastIncomeDate: hireDate,
+        //     lastWeekIncome: 0,
+        //   } : {}),
+        // });
 
         writeCompany(company);
         this.talentDetail = null;
         this.refresh();
-        this.showToast(`已招聘 ${person.name}`);
+        this.showToast(`已录用 ${person.name}，预计 ${expectStr} 入职`);
       },
     hireDays(emp) {
       if (!this.game || !emp.hireDate) return 0;
@@ -5132,6 +5936,9 @@ createApp({
       company.investments.forEach(inv => {
         inv.assignedEmployees = (inv.assignedEmployees || []).filter(id => id !== emp.id);
       });
+	  company.acquisitions.forEach(a => {
+	    a.assignedEmployees = (a.assignedEmployees || []).filter(id => id !== emp.id);
+	  });
       writeCompany(company);
 
       this.refresh();
@@ -5189,7 +5996,7 @@ createApp({
 
   openMeeting() {
     if (!this.company || !this.canOpenMeeting) return;
-    const active = this.company.employees.filter(e => e.status !== 'business');
+    const active = this.company.employees.filter(e => e.status === 'normal');
     const salaries = {};
     this.company.employees.forEach(e => { salaries[e.id] = e.salary; });
     this.meetingAttendees = active.map(e => ({
@@ -5235,7 +6042,7 @@ createApp({
         backgroundColor: 'rgba(22,27,34,.96)',
         borderColor: '#30363d',
         textStyle: { color: '#e6edf3', fontSize: 12 },
-        formatter: p => `${p.name}<br/>${p.value.toLocaleString()} 元（${p.percent}%）`,
+        formatter: p => `${p.name}<br/>${this.fmtBig(p.value)}（${p.percent}%）`,
       },
       legend: { bottom: 0, textStyle: { color: '#8b949e', fontSize: 12 } },
       series: [{
@@ -5253,7 +6060,7 @@ createApp({
         label: {
           color: '#e6edf3',
           fontSize: 11,
-          formatter: p => `${p.name}\n${p.value.toLocaleString()}`,
+          formatter: p => `${p.name}\n${this.fmtBig(p.value)}`,
         },
       }],
     });
@@ -5275,7 +6082,7 @@ createApp({
         textStyle: { color: '#e6edf3', fontSize: 12 },
         formatter: params => {
           const p = params[0];
-          return `${p.name}<br/><b>${(Number(p.value) || 0).toLocaleString()}</b> 元`;
+          return `${p.name}<br/><b>${this.fmtBig(Number(p.value) || 0)}</b>`;
         },
       },
       grid: { left: 70, right: 20, top: 20, bottom: 50 },
@@ -5302,7 +6109,7 @@ createApp({
           position: 'top',
           color: '#e6edf3',
           fontSize: 11,
-          formatter: p => (Number(p.value) || 0).toLocaleString(),
+          formatter: p => this.fmtBig(Number(p.value) || 0),
         },
       }],
     });
@@ -5313,8 +6120,28 @@ createApp({
     if (!this._monthlyChart || this._monthlyChart.getDom() !== el) {
       if (this._monthlyChart) this._monthlyChart.dispose();
       this._monthlyChart = echarts.init(el);
+      this._monthlyChart.on('datazoom', () => {
+        const opt = this._monthlyChart.getOption();
+        const dz = opt.dataZoom && opt.dataZoom[0];
+        if (dz && dz.start != null && dz.end != null) {
+          this.monthlyZoom = { start: dz.start, end: dz.end };
+        }
+      });
     }
+  
     const data = this.monthlyChartData;
+  
+    let start, end;
+    if (this.monthlyZoom) {
+      start = this.monthlyZoom.start;
+      end = this.monthlyZoom.end;
+    } else {
+      const n = data.length;
+      if (n <= 12) { start = 0; end = 100; }
+      else { end = 100; start = 100 - (12 / n) * 100; }
+      this.monthlyZoom = { start, end };
+    }
+  
     this._monthlyChart.setOption({
       backgroundColor: 'transparent',
       tooltip: {
@@ -5325,10 +6152,22 @@ createApp({
         textStyle: { color: '#e6edf3', fontSize: 12 },
         formatter: params => {
           const p = params[0];
-          return `${p.name}<br/><b>${(Number(p.value) || 0).toLocaleString()}</b> 元`;
+          return `${p.name}<br/><b>${this.fmtBig(Number(p.value) || 0)}</b>`;
         },
       },
-      grid: { left: 70, right: 20, top: 20, bottom: 50 },
+      grid: { left: 70, right: 20, top: 20, bottom: 60 },
+      dataZoom: [
+        {
+          type: 'inside',
+          start,
+          end,
+          minValueSpan: 6,
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+        },
+      ],
       xAxis: {
         type: 'category',
         data: data.map(d => d.label),
@@ -5368,8 +6207,28 @@ createApp({
     if (!this._quarterlyChart || this._quarterlyChart.getDom() !== el) {
       if (this._quarterlyChart) this._quarterlyChart.dispose();
       this._quarterlyChart = echarts.init(el);
+      this._quarterlyChart.on('datazoom', () => {
+        const opt = this._quarterlyChart.getOption();
+        const dz = opt.dataZoom && opt.dataZoom[0];
+        if (dz && dz.start != null && dz.end != null) {
+          this.quarterlyZoom = { start: dz.start, end: dz.end };
+        }
+      });
     }
+  
     const data = this.quarterlyChartData;
+  
+    let start, end;
+    if (this.quarterlyZoom) {
+      start = this.quarterlyZoom.start;
+      end = this.quarterlyZoom.end;
+    } else {
+      const n = data.length;
+      if (n <= 4) { start = 0; end = 100; }
+      else { end = 100; start = 100 - (4 / n) * 100; }
+      this.quarterlyZoom = { start, end };
+    }
+  
     this._quarterlyChart.setOption({
       backgroundColor: 'transparent',
       tooltip: {
@@ -5380,10 +6239,22 @@ createApp({
         textStyle: { color: '#e6edf3', fontSize: 12 },
         formatter: params => {
           const p = params[0];
-          return `${p.name}<br/><b>${(Number(p.value) || 0).toLocaleString()}</b> 元`;
+          return `${p.name}<br/><b>${this.fmtBig(Number(p.value) || 0)}</b>`;
         },
       },
-      grid: { left: 70, right: 20, top: 20, bottom: 40 },
+      grid: { left: 70, right: 20, top: 20, bottom: 50 },
+      dataZoom: [
+        {
+          type: 'inside',
+          start,
+          end,
+          minValueSpan: 2,
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+        },
+      ],
       xAxis: {
         type: 'category',
         data: data.map(d => d.label),
@@ -5400,7 +6271,7 @@ createApp({
         type: 'bar',
         data: data.map(d => ({
           value: d.value,
-          itemStyle: { color: d.value >= 0 ? '#f5484d' : '#3fd07c' },
+          itemStyle: { color: d.value >= 0 ? '#1f6feb' : '#3fd07c' },
         })),
         barMaxWidth: 46,
         label: {
@@ -5473,15 +6344,13 @@ createApp({
         if (!(amt > 0)) return this.showToast('请输入借款金额');
         const avail = this.loanLimit - this.company.loan.balance;
         if (amt > avail) return this.showToast(`超出可借额度，最多可借 ${avail.toFixed(2)} 元`);
-        if (company.loan.creditStatus === 'dishonest' || company.loan.creditStatus === 'bankrupt') {
-          return this.showToast('公司信用异常，无法借款');
-        }
         const game = readGame();
         const company = readCompany();
         if (!game || !company) return;
-
+        if (company.loan.creditStatus === 'dishonest' || company.loan.creditStatus === 'bankrupt') {
+          return this.showToast('公司信用异常，无法借款');
+        }
         const today = fmtDate(new Date(game.currentDate));
-        company.loan.balance = round2(company.loan.balance + amt);
         const wasZero = !company.loan.balance || company.loan.balance <= 0;
         company.loan.balance = round2(company.loan.balance + amt);
         company.loan.lastInterestDate = today;
@@ -5576,6 +6445,9 @@ createApp({
         lastWeekSettleDate: today,
         lastMonthSettleDate: today,
         reports: [],
+		ceoId: null,
+		secretaryId: null,
+		assignedEmployees: [],
       });
 
       writeCompany(company);
@@ -5649,6 +6521,144 @@ createApp({
       this.refresh();
       this.showToast(`已转让「${target.name}」，获得 ${sellWan} 万元`);
     },
+	toggleProductEmployee(empId) {
+	  if (!this.productDetail) return;
+	  const company = normalizeCompany(readCompany());
+	  const target = (company.products || []).find(p => p.id === this.productDetail.id);
+	  if (!target) return;
+	  if (!Array.isArray(target.assignedEmployees)) target.assignedEmployees = [];
+	
+	  const i = target.assignedEmployees.indexOf(empId);
+	  if (i >= 0) target.assignedEmployees.splice(i, 1);
+	  else target.assignedEmployees.push(empId);
+	
+	  writeCompany(company);
+	  this.refresh();
+	  this.productDetail = (company.products || []).find(p => p.id === this.productDetail.id);
+	},
+	assignSubCEO(e) {
+	  const sub = this.subsidiaryDetail;
+	  if (!sub) return;
+	  const val = e.target.value;
+	  const ceoId = val === '' ? null : val;
+	
+	  const company = normalizeCompany(readCompany());
+	  const target = (company.acquisitions || []).find(a => a.id === sub.id);
+	  if (!target) return;
+	
+	  if (ceoId) {
+	    const used = (company.acquisitions || []).some(a => a.id !== sub.id && a.ceoId === ceoId);
+	    if (used) return this.showToast('该 CEO 已负责其他子公司');
+	  }
+	
+	  target.ceoId = ceoId;
+	  writeCompany(company);
+	  this.refresh();
+	  this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === sub.id);
+	  this.showToast(ceoId ? '已分配 CEO，周收益 +9%' : '已取消 CEO 分配');
+	},
+	/* ==================== 金融业务 ==================== */
+	confirmFinance() {
+	  const game = readGame();
+	  const company = normalizeCompany(readCompany());
+	  if (!game || !company) return;
+	
+	  const rate = Math.round(Number(this.financeRate));
+	  if (!(rate >= 2 && rate <= 80)) return this.showToast('年利率必须是 2~80 的整数');
+	
+	  const injectWan = Math.floor(Number(this.financeInject) || 0);
+	  if (injectWan < 0) return this.showToast('注入金额不能为负');
+	
+	  if (injectWan > 0) {
+	    const costYuan = injectWan * 10000;
+	    if (costYuan > Number(game.cash)) return this.showToast('公司现金不足');
+	    game.cash = round2(Number(game.cash) - costYuan);
+	    company.financeBusiness.poolBalance = round2(company.financeBusiness.poolBalance + injectWan);
+	  }
+	
+	  company.financeBusiness.annualRate = rate;
+	
+	  writeCompany(company);
+	  writeGame(game);
+	  this.financeInject = 0;
+	  this.refresh();
+	  this.showToast(injectWan > 0
+	    ? `已注入 ${injectWan} 万元，年利率 ${rate}%`
+	    : `年利率已更新为 ${rate}%`);
+	},
+	withdrawFinance() {
+	  const game = readGame();
+	  const company = normalizeCompany(readCompany());
+	  if (!game || !company) return;
+	
+	  const wan = Number(this.financeWithdraw);
+	  if (!Number.isInteger(wan) || wan <= 0) return this.showToast('提取金额必须是正整数（万）');
+	  if (wan > company.financeBusiness.poolBalance) return this.showToast('超过放贷池余额');
+	
+	  company.financeBusiness.poolBalance = round2(company.financeBusiness.poolBalance - wan);
+	  game.cash = round2(Number(game.cash) + wan * 10000);
+	
+	  writeCompany(company);
+	  writeGame(game);
+	  this.financeWithdraw = 0;
+	  this.refresh();
+	  this.showToast(`已提取 ${wan} 万元到公司账户`);
+	},
+	assignSubSecretary(e) {
+	  const sub = this.subsidiaryDetail;
+	  if (!sub) return;
+	  const val = e.target.value;
+	  const secId = val === '' ? null : val;
+	
+	  const company = normalizeCompany(readCompany());
+	  const target = (company.acquisitions || []).find(a => a.id === sub.id);
+	  if (!target) return;
+	
+	  if (secId) {
+	    const used = (company.acquisitions || []).some(a => a.id !== sub.id && a.secretaryId === secId);
+	    if (used) return this.showToast('该秘书已负责其他子公司');
+	  }
+	
+	  target.secretaryId = secId;
+	  writeCompany(company);
+	  this.refresh();
+	  this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === sub.id);
+	  this.showToast(secId ? '已分配秘书，周收益 +2%' : '已取消秘书分配');
+	},
+	toggleSubEmployee(empId) {
+	  if (!this.subsidiaryDetail) return;
+	  const company = normalizeCompany(readCompany());
+	  const target = (company.acquisitions || []).find(a => a.id === this.subsidiaryDetail.id);
+	  if (!target) return;
+	  if (!Array.isArray(target.assignedEmployees)) target.assignedEmployees = [];
+	
+	  const emp = (company.employees || []).find(e => e.id === empId);
+	  if (!emp) return;
+	
+	  const i = target.assignedEmployees.indexOf(empId);
+	  if (i >= 0) {
+	    // 取消借调
+	    target.assignedEmployees.splice(i, 1);
+	    if (emp.status === 'lent') emp.status = 'normal';
+	  } else {
+	    // 新增借调
+	    if (target.assignedEmployees.length >= 10) {
+	      return this.showToast('每个子公司最多借调 10 名员工');
+	    }
+	    if (emp.type !== 'staff') return this.showToast('只能借调普通员工');
+	    if (emp.status !== 'normal') return this.showToast('该员工已出差或被借调');
+	    target.assignedEmployees.push(empId);
+	    emp.status = 'lent';
+	  }
+	
+	  writeCompany(company);
+	  this.refresh();
+	  this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === this.subsidiaryDetail.id);
+	  this.showToast(i >= 0 ? `已取消借调 ${emp.name}` : `已借调 ${emp.name}`);
+	},
+	productTypeChange(type) {
+
+	}
   },
 }).mount('#app');
 </script>
