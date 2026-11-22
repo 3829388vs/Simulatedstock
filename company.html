@@ -1096,7 +1096,7 @@
                @change="toggleImport(c.id)">
         <span>{{ c.name }}</span>
         <span style="font-size:12px;color:#8b949e">
-          {{ c.type === 'manager' ? ('管理 · ' + managerLevelName(c.level)) : '普通员工' }}
+          {{ c.type === 'manager' ? ('管理 · ' + managerLevelName(c.level)) : c.position }}
         </span>
         <span style="margin-left:auto;font-size:12px;color:#6e7681">未分配部门</span>
       </label>
@@ -1443,8 +1443,10 @@
           {{ (Number(meetingForm.salaries[e.id]) || 0).toLocaleString() }} 元
         </span>
         <button class="act" style="padding:4px 10px;font-size:12px"
+				v-if="showSalaryOpt"
                 @click="increaseSalary(e.id)">涨薪5%</button>
         <button class="act sell" style="padding:4px 10px;font-size:12px"
+				v-if="showSalaryOpt"
                 @click="decreaseSalary(e.id)">降薪5%</button>
       </div>
       <div v-if="company.employees.length === 0" class="empty" style="padding:16px 0">暂无员工</div>
@@ -1821,7 +1823,7 @@ const projectList = [
     name: "深圳市罗湖区万象城5层533店铺盛香亭热卤转转火锅投资项目",
     type: "商铺",
     price: 130,
-    img: "https://wx1.sinaimg.cn/mw690/008xDBfkgy1i9s1qdadyyj32c0340u0y.jpg",
+    img: "https://img0.baidu.com/it/u=1274272239,3485931387&fm=253&fmt=auto&app=138&f=JPEG?w=667&h=500",
     minHuibao: 180000,
     maxHuibao: 380000,
     needAd: false,
@@ -1833,7 +1835,7 @@ const projectList = [
     name: "深圳市罗湖区南湖街道金光华广场6层622重庆老火锅投资项目",
     type: "商铺",
     price: 150,
-    img: "https://a.zdmimg.com/202605/11/6a019596bb09c4654.jpg_fo742.jpg",
+    img: "https://img2.baidu.com/it/u=1431777925,3809593755&fm=253&fmt=auto&app=138&f=JPEG?w=692&h=500",
     minHuibao: 230000,
     maxHuibao: 370000,
     needAd: false,
@@ -1881,7 +1883,7 @@ const projectList = [
     name: "珠海市金湾区华发商都第三轮融资",
     type: "商铺",
     price: 10000,
-    img: "https://bkimg.cdn.bcebos.com/pic/cb8065380cd791237bb0ce0fa2345982b2b7807d",
+    img: "https://img0.baidu.com/it/u=908289476,432637357&fm=253&fmt=auto&app=138&f=JPEG?w=906&h=500",
     minHuibao: 3900000,
     maxHuibao: 7300000,
     needAd: false,
@@ -1893,7 +1895,7 @@ const projectList = [
     name: "中山市环城高速第一轮融资",
     type: "交通",
     price: 8000,
-    img: "https://pics6.baidu.com/feed/09fa513d269759ee41ebe44bcf35ca066f22dfd2.jpeg@f_auto?token=7fe82621d8118ba7d6514a1c7f21095c",
+    img: "https://img2.baidu.com/it/u=4014013672,2953524724&fm=253&fmt=auto?w=1203&h=800",
     minHuibao: 1700000,
     maxHuibao: 5280000,
     needAd: false,
@@ -2342,7 +2344,7 @@ const companyList = [
     liabilities: 60100,
     industry: "教育培训",
     mainProducts: "考公考研，K12辅导、职业技能培训",
-    img: "https://bkimg.cdn.bcebos.com/pic/9358d109b3de9c82d158c68ce8d7970a19d8bc3ee520",
+    img: "https://img1.baidu.com/it/u=3800080950,3642309517&fm=253&fmt=auto&app=138&f=JPEG?w=799&h=500",
     averNetProfit: 1518,
     employees: 770,
     address: "北京市海淀区"
@@ -2834,28 +2836,28 @@ const MANAGER_ROLE_DEFS = {
 };
 /* ==================== 产品研发 ==================== */
 const PRODUCT_TYPE_INFO = {
-  '食品饮料':         { color: '#3fd07c',maoli: 0.23, tech: false },
+  '食品饮料':         { color: '#3fd07c',maoli: 0.25, tech: false },
   '建筑建材':         { color: '#d29922',maoli: 0.37, tech: false },
   '体育建材':         { color: '#d29922',maoli: 0.39, tech: false },
   '文化教育':         { color: '#3fd07c',maoli: 0.45, tech: false },
   '医疗器械':         { color: '#a371f7',maoli: 0.27, tech: true  },
-  '石油化工':         { color: '#d29922',maoli: 0.23, tech: false },
+  '石油化工':         { color: '#d29922',maoli: 0.26, tech: false },
   '化工':             { color: '#d29922',maoli: 0.35, tech: false },
-  '车辆':             { color: '#d29922',maoli: 0.25, tech: false },
+  '车辆':             { color: '#d29922',maoli: 0.26, tech: false },
   '车辆配件':         { color: '#d29922',maoli: 0.29, tech: false },
   '计算机软硬件':     { color: '#1f6feb',maoli: 0.35, tech: true  },
   '通信设备':         { color: '#1f6feb',maoli: 0.33, tech: true  },
   '服装':             { color: '#3fd07c',maoli: 0.57, tech: false },
-  '半导体材料及芯片': { color: '#a371f7',maoli: 0.29, tech: true  },
+  '半导体材料及芯片': { color: '#a371f7',maoli: 0.33, tech: true  },
   '玩具礼品':         { color: '#3fd07c',maoli: 0.43, tech: false },
   '家居用品':         { color: '#3fd07c',maoli: 0.37, tech: false },
   '包装':             { color: '#3fd07c',maoli: 0.45, tech: false },
   '办公用品':         { color: '#3fd07c',maoli: 0.47, tech: false },
   '酒':         { color: '#aaffff',maoli: 0.83, tech: false },
-  '人工智能':         { color: '#ff4f0a',maoli: 0.3, tech: false },
-  '自动化设备':         { color: '#5555ff',maoli: 0.26, tech: false },
-  '服务器':         { color: '#6c6cff',maoli: 0.22, tech: false },
-  '电子产品':         { color: '#009dff',maoli: 0.21, tech: false },
+  '人工智能':         { color: '#ff4f0a',maoli: 0.35, tech: false },
+  '自动化设备':         { color: '#5555ff',maoli: 0.28, tech: false },
+  '服务器':         { color: '#6c6cff',maoli: 0.32, tech: false },
+  '电子产品':         { color: '#009dff',maoli: 0.29, tech: false },
   '传媒产品':         { color: '#ff3d3d',maoli: 0.45, tech: false },
   '美妆护肤':         { color: '#ff7272',maoli: 0.51, tech: false },
   '奢侈品':         { color: '#aa049a',maoli: 0.75, tech: false },
@@ -3023,9 +3025,9 @@ const HEADSHOT_POOL = {
     'https://img2.baidu.com/it/u=3471706767,3655741776&fm=253&fmt=auto&app=120&f=JPEG?w=500&h=674', // 中年男-1
     'https://img2.baidu.com/it/u=3211861944,3474775501&fm=253&fmt=auto&app=120&f=JPEG?w=800&h=1200', // 中年男-2
     'https://img2.baidu.com/it/u=1344831273,1668815147&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=750', // 中年男-3
-    'https://pics4.baidu.com/feed/42166d224f4a20a491718cd2ae52382d720ed04c.jpeg@f_auto?token=df553ce5b68a821888bf976f5645c8e8', // 中年男-4
+    'https://img1.baidu.com/it/u=2303133016,3913135791&fm=253&fmt=auto&app=138&f=JPEG?w=333&h=500', // 中年男-4
     'https://q8.itc.cn/images01/20250524/eb974d528e0e44d78f1bf4b203f2f735.jpeg', // 中年男-5
-	'https://pics7.baidu.com/feed/5243fbf2b2119313b7fcab8afe0f6ed891238d17.jpeg@f_auto?token=e2891009dce0ed00202ef29c7d1712f4',
+	'https://img1.baidu.com/it/u=2363457583,1291978449&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=666',
 	'https://t7.baidu.com/it/u=1107540403,2411248719&fm=193',
 	'https://img0.baidu.com/it/u=1345810286,993397208&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=500'
   ],
@@ -3036,7 +3038,7 @@ const HEADSHOT_POOL = {
     'https://img2.baidu.com/it/u=76178362,3467027776&fm=253&app=138&f=JPEG?w=500&h=666', // 中年女-4
     'https://qcloud.dpfile.com/pc/AUL-SNrS8xttFumvzxJUKHX3HIGjHXtTR5vPznB3UiSMLdZ21fUbS-AzRa0W0wPg.jpg',
 	'https://q8.itc.cn/q_70/images03/20250223/322c63f72af84385b219640e2def25c4.jpeg',
-	'https://pics4.baidu.com/feed/03087bf40ad162d9a4f6df60c191defc8a13cd15.jpeg@f_auto?token=190fa08ecc24cbe3ba91158f6a21cf3f',
+	'https://img2.baidu.com/it/u=3465489831,913252209&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=640',
 	'https://img0.baidu.com/it/u=3938628777,1715559558&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=525'
   ],
   '年轻男': [
@@ -3506,6 +3508,7 @@ createApp({
 	  acquisitionPage: 1,
 	  monthlyZoom: null,
 	  quarterlyZoom: null,
+	  showSalaryOpt: true,
 	  productType: {
 	    '食品饮料':         { color: '#3fd07c',maoli: 0.23, tech: false },
 	    '建筑建材':         { color: '#d29922',maoli: 0.37, tech: false },
@@ -6296,10 +6299,12 @@ createApp({
   increaseSalary(id) {
     const cur = Number(this.meetingForm.salaries[id]) || 0;
     this.meetingForm.salaries[id] = Math.round(cur * 1.05);
+	setTimeout(() => { this.showSalaryOpt = false; }, 50000);
   },
   decreaseSalary(id) {
     const cur = Number(this.meetingForm.salaries[id]) || 0;
     this.meetingForm.salaries[id] = Math.round(cur * 0.95);
+	setTimeout(() => { this.showSalaryOpt = false; }, 50000);
   },
   closeMeeting() {
     this.meetingVisible = false;
