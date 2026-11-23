@@ -362,6 +362,20 @@
         {{ phase === 'trading' ? '● 开盘交易中' : '● 收盘休息中' }}
       </span>
       <span class="countdown">{{ countdownText }}</span>
+      <span v-if="currentMarketEnv"
+            class="badge"
+            :title="currentMarketEnv.desc"
+            :style="{
+              background: currentMarketEnv.color + '22',
+              color: currentMarketEnv.color,
+              border: '1px solid ' + currentMarketEnv.color + '55'
+            }">
+        🌍 {{ currentMarketEnv.name }}
+      </span>
+      <span v-if="company && company.marketEnv"
+            style="font-size:11px;color:#6e7681">
+        环境至 {{ company.marketEnv.endDate }}
+      </span>
       <span v-if="company && company.loan.creditStatus === 'dishonest'"
             class="badge" style="background:rgba(245,72,77,.15);color:#ff5c5c;border:1px solid rgba(245,72,77,.35)">
         ⚠ 失信企业（{{ dishonestRemainDays }} 天内还清可恢复）
@@ -1614,7 +1628,7 @@
       <div class="row"><span>收购时间</span><span>{{ subsidiaryDetail.acquiredAt }}</span></div>
       <div class="row"><span>员工总数</span><span>{{ subsidiaryDetail.employees }} 人</span></div>
       <div class="row"><span>当前净资产</span><span>{{ subsidiaryDetail.currentAssets }} 万元</span></div>
-      <div class="row"><span>剩余负债（并入母公司）</span><span>{{ subsidiaryDetail.liabilitiesRemaining }} 万元</span></div>
+      <div class="row"><span>剩余负债</span><span>{{ subsidiaryDetail.liabilitiesRemaining }} 万元</span></div>
       <div class="row"><span>上周盈利</span><span :class="pnlClass(subsidiaryDetail.weeklyIncome)">{{ subsidiaryDetail.weeklyIncome }} 万元</span></div>
       <div style="margin-top:14px;border-top:1px solid #21262d;padding-top:12px">
         <div class="form-item">
@@ -2863,7 +2877,92 @@ const PRODUCT_TYPE_INFO = {
   '奢侈品':         { color: '#aa049a',maoli: 0.75, tech: false },
 };
 const PRODUCT_TYPES_LIST = Object.keys(PRODUCT_TYPE_INFO);
+/* =========================================================
+ *  市场环境：影响各类经营收益的倍率
+ *  category: project / property / product / subsidiary / finance
+ *  projectBonus / productBonus: 特定子类型额外倍率
+ * ========================================================= */
+const MARKET_ENVIRONMENTS = [
+  {
+    id: 'boom', name: '经济蓬勃发展', color: '#f5484d',
+    desc: '对外投资×150% · 置业×120% · 产品×180% · 子公司×150%',
+    project: 1.5, property: 1.2, product: 1.8, subsidiary: 1.5, finance: 1.0,
+  },
+  {
+    id: 'shrink', name: '市场萎缩', color: '#3fd07c',
+    desc: '对外投资×75% · 置业×70% · 产品×70% · 子公司×85%',
+    project: 0.75, property: 0.7, product: 0.7, subsidiary: 0.85, finance: 1.0,
+  },
+  {
+    id: 'stable', name: '市场平稳发展', color: '#9ca3af',
+    desc: '各类收益不变',
+    project: 1, property: 1, product: 1, subsidiary: 1, finance: 1.0,
+  },
+  {
+    id: 'crisis', name: '金融危机到来', color: '#8b0000',
+    desc: '对外投资×60% · 置业×55% · 产品×50% · 子公司×65%',
+    project: 0.6, property: 0.55, product: 0.5, subsidiary: 0.65, finance: 1.0,
+  },
+  {
+    id: 'flourish', name: '经济欣欣向荣', color: '#ff5c5c',
+    desc: '对外投资×130% · 置业×120% · 产品×150% · 子公司×130%',
+    project: 1.3, property: 1.2, product: 1.5, subsidiary: 1.3, finance: 1.0,
+  },
+  {
+    id: 'real', name: '实体经济时代', color: '#d29922',
+    desc: '对外投资×110% · 置业×125% · 产品×120% · 实体类产品额外×150%',
+    project: 1.1, property: 1.25, product: 1.2, subsidiary: 1.0, finance: 1.0,
+    productBonus: {
+      types: ['食品饮料', '体育建材', '玩具礼品', '服装', '家居用品', '包装', '酒'],
+      mult: 1.5,
+    },
+  },
+  {
+    id: 'ai', name: '人工智能时代', color: '#a371f7',
+    desc: '科技类产品×200%，其他不变',
+    project: 1, property: 1, product: 1, subsidiary: 1, finance: 1.0,
+    productBonus: {
+      types: ['人工智能', '自动化设备', '服务器', '电子产品', '半导体材料及芯片', '计算机软硬件'],
+      mult: 2,
+    },
+  },
+  {
+    id: 'realestate', name: '地产时代', color: '#f0883e',
+    desc: '地产/商铺项目×230% · 置业×180%',
+    project: 1, property: 1.8, product: 1, subsidiary: 1, finance: 1.0,
+    projectBonus: { types: ['地产', '商铺'], mult: 2.3 },
+  },
+  {
+    id: 'consume', name: '大消费时代', color: '#ff69b4',
+    desc: '消费类项目×230% · 消费类产品×200% · 金融放贷×250%',
+    project: 1, property: 1, product: 1, subsidiary: 1, finance: 2.5,
+    projectBonus: { types: ['汽车', '食品', '商铺', '景区', '文旅', '电商'], mult: 2.3 },
+    productBonus: {
+      types: ['食品饮料', '玩具礼品', '服装', '家居用品', '包装', '酒', '电子产品', '美妆护肤', '奢侈品'],
+      mult: 2,
+    },
+  },
+];
 
+function getRandomMarketEnv() {
+  return MARKET_ENVIRONMENTS[Math.floor(Math.random() * MARKET_ENVIRONMENTS.length)];
+}
+
+function getMarketMultiplier(company, category, subType) {
+  const envId = company && company.marketEnv && company.marketEnv.id;
+  const env = MARKET_ENVIRONMENTS.find(e => e.id === envId);
+  if (!env) return 1;
+  let mult = env[category] || 1;
+  if (category === 'product' && env.productBonus && subType &&
+      env.productBonus.types.includes(subType)) {
+    mult *= env.productBonus.mult;
+  }
+  if (category === 'project' && env.projectBonus && subType &&
+      env.projectBonus.types.includes(subType)) {
+    mult *= env.projectBonus.mult;
+  }
+  return mult;
+}
 function productColor(type) {
   return (PRODUCT_TYPE_INFO[type] && PRODUCT_TYPE_INFO[type].color) || '#1f6feb';
 }
@@ -3224,6 +3323,24 @@ function normalizeCompany(company) {
   }
   if (!company.receivables) {
     company.receivables = { balance: 0, lastCollectDate: null };
+  }
+  if (!company.marketEnv || !company.marketEnv.id) {
+    const env = getRandomMarketEnv();
+    const start = new Date(company.foundedAt || new Date());
+    const next = new Date(start);
+    next.setDate(next.getDate() + randInt(55, 110));
+    company.marketEnv = {
+      id: env.id,
+      startDate: fmtDate(start),
+      endDate: fmtDate(next),
+    };
+  } else {
+    if (!company.marketEnv.startDate) company.marketEnv.startDate = company.foundedAt || fmtDate(new Date());
+    if (!company.marketEnv.endDate) {
+      const start = new Date(company.marketEnv.startDate);
+      start.setDate(start.getDate() + randInt(55, 110));
+      company.marketEnv.endDate = fmtDate(start);
+    }
   }
   if (!company.financeBusiness) {
     company.financeBusiness = {
@@ -3811,13 +3928,19 @@ createApp({
       return round2((this.company?.properties || []).reduce((s, p) => s + (p.totalIncome || 0), 0));
     },
     assetPieData() {
-      const total = Math.max(0, this.totalAssetsWithReceivables);
+      // const total = Math.max(0, this.totalAssetsWithReceivables);
       const liab = Math.max(0, this.totalLiabilitiesYuan || 0);
       const propAssets = Math.max(0, (this.company?.properties || []).reduce((s, p) => s + (p.totalCost || 0), 0));
+      const subNet = Math.max(0, (this.company?.acquisitions || []).reduce(
+        (s, a) => s + (Number(a.currentAssets) || 0) * 10000, 0
+      ));
+       // 母公司净资产 = 净资产总额 − 子公司净资产
+      const parentNet = Math.max(0, round2(this.netAssets - subNet));
       return [
-        { name: '资产总额', value: round2(total) },
+        { name: '公司净资产', value: parentNet },
         { name: '负债', value: round2(liab) },
         { name: '置业资产', value: round2(propAssets) },
+        { name: '子公司净资产', value: round2(subNet) },
       ];
     },
     revenueBarData() {
@@ -4049,6 +4172,13 @@ createApp({
 	  const list = this.financeBusiness?.pendingLoans || [];
 	  return round2(list.reduce((s, l) => s + Math.max(0, (l.amount || 0) - (l.badDebt || 0)), 0));
 	},
+  currentMarketEnv() {
+    if (!this.company || !this.company.marketEnv) {
+      return MARKET_ENVIRONMENTS.find(e => e.id === 'stable');
+    }
+    return MARKET_ENVIRONMENTS.find(e => e.id === this.company.marketEnv.id)
+        || MARKET_ENVIRONMENTS.find(e => e.id === 'stable');
+  },
   },
   watch: {
     tab(val) {
@@ -4302,6 +4432,13 @@ createApp({
         this._pendingNotices = [];
 
         if (company) {
+          // 环境变更优先于所有结算：先切换环境，同一天的结算用新环境
+          if (!this._skipEnvChange) {
+            if (this.checkMarketEnvChange(company, game)) { companyDirty = true; }
+          }
+
+          if (this.accrueInterest(company, game))        companyDirty = true;
+          if (this.settleManagerIncome(company, game)) { companyDirty = true; gameDirty = true; }
           if (this.accrueInterest(company, game))        companyDirty = true;
           if (this.settleLoanCollection(company, game)) { companyDirty = true; }
 		  if (this.settlePendingHires(company, game)) { companyDirty = true; }
@@ -4360,6 +4497,27 @@ createApp({
         }
         loan.lastInterestDate = fmtDate(currentDate);
         return true;
+    },
+    checkMarketEnvChange(company, game) {
+      if (!company || !company.marketEnv) return false;
+      const currentDate = new Date(game.currentDate);
+      const end = new Date(company.marketEnv.endDate);
+      if (isNaN(end.getTime())) return false;
+      if (currentDate < end) return false;
+
+      const env = getRandomMarketEnv();
+      const start = new Date(currentDate);
+      const next = new Date(start);
+      next.setDate(next.getDate() + randInt(55, 110));
+
+      const oldName = (MARKET_ENVIRONMENTS.find(e => e.id === company.marketEnv.id) || {}).name || '';
+      company.marketEnv = {
+        id: env.id,
+        startDate: fmtDate(start),
+        endDate: fmtDate(next),
+      };
+      this._pendingNotices.push(`市场环境由「${oldName}」变为「${env.name}」`);
+      return true;
     },
     settleLoanCollection(company, game) {
       const loan = company.loan;
@@ -4523,7 +4681,9 @@ createApp({
           while (daysSinceLast >= 7) {
             const lo = inv.minHuibao != null ? inv.minHuibao : proj.minHuibao;
             const hi = inv.maxHuibao != null ? inv.maxHuibao : proj.maxHuibao;
-            const amount = Math.round(rand(lo, hi));
+            const projectType = inv.type || proj.type;
+            const mult = getMarketMultiplier(company, 'project', projectType);
+            const amount = Math.round(rand(lo, hi) * mult);
 
             let cashAmount = amount;
             if (Math.random() < 0.20) {                                     // 20% 坏账
@@ -4598,7 +4758,8 @@ createApp({
           // 每满 7 天结算一次
           while (dayDiff(lastSettle, currentDate) >= 7) {
               const range = calcPropertyWeeklyRange(prop);
-              const gross = rand(range.min, range.max);
+              const envMult = getMarketMultiplier(company, 'property', prop.type);
+              const gross = rand(range.min, range.max) * envMult;
 
               const propertyTax = gross * 0.12;
               const landUseTax = (Number(prop.area) || 0) * 22;
@@ -4675,7 +4836,8 @@ createApp({
 
             // 收益
             const range = calcProductWeeklyRange(prod);
-            let amount = rand(range.min, range.max);
+            const prodMult = getMarketMultiplier(company, 'product', prod.type);
+            let amount = rand(range.min, range.max) * prodMult;;
 			//招募销售和生产工，产品收益增加
 			let staffnum = 0
 			prod.assignedEmployees.forEach(e => {
@@ -4797,8 +4959,9 @@ createApp({
 	        const lo = Math.min(minRaw, maxRaw);
 	        const hi = Math.max(minRaw, maxRaw);
 	        const raw = lo + Math.random() * (hi - lo);
-	        lent = round2(raw * (1 - fb.annualRate / 100));
-	        if (lent > fb.poolBalance) lent = fb.poolBalance;
+          const finMult = getMarketMultiplier(company, 'finance', null);
+          lent = round2(raw * (1 - fb.annualRate / 100) * finMult);
+          if (lent > fb.poolBalance) lent = fb.poolBalance;
 	        if (lent < 0) lent = 0;
 	  
 	        if (lent > 0) {
@@ -4883,6 +5046,7 @@ createApp({
 
             let income = rand(minWan, maxWan);
             if (Math.random() < 0.3) income *= 0.4;   // 困难期
+            income *= getMarketMultiplier(company, 'subsidiary', null);
 			if (sub.ceoId)       income *= 1.2;   // CEO 加成 +20%
 			if (sub.secretaryId) income *= 1.06;   // 秘书加成 +6%
 			// 借调员工营业额加成：每人 +Math.round(salary/5000)%
@@ -5246,8 +5410,20 @@ createApp({
       game.stocks.forEach(s => { s._randomPrice = undefined; });
 
       this.game = game;
-      this.nextDay();        // 内部会调用 beginDay + refresh，自动补结算所有公司业务
-      this.saveGameClock();
+
+        // 离线期间冻结市场环境，结算一律用离线前的环境
+        this._skipEnvChange = true;
+        this.nextDay();
+        this._skipEnvChange = false;
+
+        // 结算完后，按回来时的日期检测一次环境是否到期
+        const cAfter = normalizeCompany(readCompany());
+        if (cAfter && this.checkMarketEnvChange(cAfter, game)) {
+          writeCompany(cAfter);
+          this.refresh();
+        }
+
+        this.saveGameClock();
     },
     adjustLoanForAway(game, days) {
       const co = game.company;
@@ -5480,18 +5656,29 @@ createApp({
           receivableConfig: { rate: 0.05, chance: 0.5 },
           products: [],
           acquisitions: [],
-		  pendingHires: [],
-		  assignedEmployees: [],
-		  financeBusiness: {
-		    poolBalance: 0,
-		    annualRate: 12,
-		    totalInterestWan: 0,
-		    badDebtWan: 0,
-		    totalLentWan: 0,
-		    lastSettleDate: null,
-		    pendingLoans: [],
-		    records: [],
-		  },
+          pendingHires: [],
+          assignedEmployees: [],
+          financeBusiness: {
+            poolBalance: 0,
+            annualRate: 12,
+            totalInterestWan: 0,
+            badDebtWan: 0,
+            totalLentWan: 0,
+            lastSettleDate: null,
+            pendingLoans: [],
+            records: [],
+          },
+          marketEnv: (() => {
+            const env = getRandomMarketEnv();
+            const start = new Date(currentDate);
+            const next = new Date(start);
+            next.setDate(next.getDate() + randInt(55, 110));
+            return {
+              id: env.id,
+              startDate: fmtDate(start),
+              endDate: fmtDate(next),
+            };
+          })(),
         };
 
         writeCompany(company);
@@ -6056,7 +6243,8 @@ createApp({
           ...d,
           itemStyle: {
             color: d.name === '负债' ? '#3fd07c'
-                : d.name === '资产总额' ? '#1f6feb'
+                : d.name === '公司净资产' ? '#1f6feb'
+                : d.name === '子公司净资产' ? '#a371f7'
                 : '#d29922',
           },
         })),
@@ -6501,7 +6689,8 @@ createApp({
       if(sub.currentAssets<0){
         if (!confirm(`确定以5万元转让「${sub.name}」？（公司资产为负数，只能以5万元售出）`)) return;
       }else{
-        if (!confirm(`确定以 ${round2((sub.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining*0.5)} 万元转让「${sub.name}」？`)) return;
+        let zhuanrangFee = (sub.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining * 2
+        if (!confirm(`确定以 ${round2(zhuanrangFee>5?zhuanrangFee:5)} 万元转让「${sub.name}」？（子公司负债抵扣`+sub.liabilitiesRemaining * 2+`万）`)) return;
       }
 
       const game = readGame();
@@ -6511,7 +6700,7 @@ createApp({
       const target = (company.acquisitions || []).find(a => a.id === sub.id);
       if (!target) return;
 
-      const sellWan = sub.currentAssets<0 ? 5:round2((target.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining*0.5);
+      const sellWan = sub.currentAssets<0 ? 5:round2((target.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining * 2);
       const sellYuan = sellWan * 10000;
       game.cash = round2(Number(game.cash) + sellYuan);
 
@@ -6560,7 +6749,7 @@ createApp({
 	  writeCompany(company);
 	  this.refresh();
 	  this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === sub.id);
-	  this.showToast(ceoId ? '已分配 CEO，周收益 +9%' : '已取消 CEO 分配');
+	  this.showToast(ceoId ? '已分配 CEO，周收益 +20%' : '已取消 CEO 分配');
 	},
 	/* ==================== 金融业务 ==================== */
 	confirmFinance() {
