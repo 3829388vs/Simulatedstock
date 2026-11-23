@@ -374,7 +374,7 @@
       </span>
       <span v-if="company && company.marketEnv"
             style="font-size:11px;color:#6e7681">
-        环境至 {{ company.marketEnv.endDate }}
+        环境持续到 {{ company.marketEnv.endDate }}
       </span>
       <span v-if="company && company.loan.creditStatus === 'dishonest'"
             class="badge" style="background:rgba(245,72,77,.15);color:#ff5c5c;border:1px solid rgba(245,72,77,.35)">
@@ -2885,8 +2885,8 @@ const PRODUCT_TYPES_LIST = Object.keys(PRODUCT_TYPE_INFO);
 const MARKET_ENVIRONMENTS = [
   {
     id: 'boom', name: '经济蓬勃发展', color: '#f5484d',
-    desc: '对外投资×150% · 置业×120% · 产品×180% · 子公司×150%',
-    project: 1.5, property: 1.2, product: 1.8, subsidiary: 1.5, finance: 1.0,
+    desc: '对外投资×130% · 置业×120% · 产品×130% · 子公司×130%',
+    project: 1.3, property: 1.2, product: 1.3, subsidiary: 1.3, finance: 1.0,
   },
   {
     id: 'shrink', name: '市场萎缩', color: '#3fd07c',
@@ -2904,42 +2904,37 @@ const MARKET_ENVIRONMENTS = [
     project: 0.6, property: 0.55, product: 0.5, subsidiary: 0.65, finance: 1.0,
   },
   {
-    id: 'flourish', name: '经济欣欣向荣', color: '#ff5c5c',
-    desc: '对外投资×130% · 置业×120% · 产品×150% · 子公司×130%',
-    project: 1.3, property: 1.2, product: 1.5, subsidiary: 1.3, finance: 1.0,
-  },
-  {
     id: 'real', name: '实体经济时代', color: '#d29922',
-    desc: '对外投资×110% · 置业×125% · 产品×120% · 实体类产品额外×150%',
-    project: 1.1, property: 1.25, product: 1.2, subsidiary: 1.0, finance: 1.0,
+    desc: '对外投资×110% · 置业×110% · 产品×110% · 实体类产品额外×130%',
+    project: 1.1, property: 1.1, product: 1.1, subsidiary: 1.0, finance: 1.0,
     productBonus: {
       types: ['食品饮料', '体育建材', '玩具礼品', '服装', '家居用品', '包装', '酒'],
-      mult: 1.5,
+      mult: 1.3,
     },
   },
   {
     id: 'ai', name: '人工智能时代', color: '#a371f7',
-    desc: '科技类产品×200%，其他不变',
+    desc: '科技类产品×170%，其他不变',
     project: 1, property: 1, product: 1, subsidiary: 1, finance: 1.0,
     productBonus: {
       types: ['人工智能', '自动化设备', '服务器', '电子产品', '半导体材料及芯片', '计算机软硬件'],
-      mult: 2,
+      mult: 1.7,
     },
   },
   {
     id: 'realestate', name: '地产时代', color: '#f0883e',
-    desc: '地产/商铺项目×230% · 置业×180%',
-    project: 1, property: 1.8, product: 1, subsidiary: 1, finance: 1.0,
-    projectBonus: { types: ['地产', '商铺'], mult: 2.3 },
+    desc: '地产/商铺项目×150% · 置业×150%',
+    project: 1, property: 1.5, product: 1, subsidiary: 1, finance: 1.0,
+    projectBonus: { types: ['地产', '商铺'], mult: 1.5 },
   },
   {
     id: 'consume', name: '大消费时代', color: '#ff69b4',
-    desc: '消费类项目×230% · 消费类产品×200% · 金融放贷×250%',
-    project: 1, property: 1, product: 1, subsidiary: 1, finance: 2.5,
-    projectBonus: { types: ['汽车', '食品', '商铺', '景区', '文旅', '电商'], mult: 2.3 },
+    desc: '消费类项目×160% · 消费类产品×150% · 金融放贷×300%',
+    project: 1, property: 1, product: 1, subsidiary: 1, finance: 3,
+    projectBonus: { types: ['汽车', '食品', '商铺', '景区', '文旅', '电商'], mult: 1.6 },
     productBonus: {
       types: ['食品饮料', '玩具礼品', '服装', '家居用品', '包装', '酒', '电子产品', '美妆护肤', '奢侈品'],
-      mult: 2,
+      mult: 1.5,
     },
   },
 ];
@@ -5024,9 +5019,6 @@ createApp({
 
         const managers = (company.employees || []).filter(e => e.type === 'manager');
         const gmCount = managers.filter(e => e.role === '总经理').length;
-        const engineerCount = (company.employees || []).filter(
-          e => e.type === 'staff' && ['前端工程师', '后端工程师'].includes(e.position)
-        ).length;
 
         (company.acquisitions || []).forEach(sub => {
           const acquired = new Date(sub.acquiredAt);
@@ -5040,8 +5032,9 @@ createApp({
           while (dayDiff(lastWeek, currentDate) >= 7) {
             const baseMin = (sub.averNetProfit || 0) * 0.1;
             const baseMax = (sub.averNetProfit || 0) * 0.4;
-            let minWan = baseMin + gmCount * 0.5 + engineerCount * 0.2;
-            let maxWan = baseMax + gmCount * 2.8 + engineerCount * 0.8;
+            //员工越多，子公司收益越大
+            let minWan = baseMin + gmCount * 0.5 + parseInt(sub.employees) * 0.2;
+            let maxWan = baseMax + gmCount * 2.8 + parseInt(sub.employees) * 0.6;
             if (minWan > maxWan) { const t = minWan; minWan = maxWan; maxWan = t; }
 
             let income = rand(minWan, maxWan);
@@ -5087,7 +5080,7 @@ createApp({
 
             const revenue = round2(sub.monthRevenueWan || 0);
             const empCount = sub.employees || 0;
-            const perSalaryWan = 1 + (sub.initialTotalAssets || 0) * 0.001;
+            const perSalaryWan = 1 + (sub.initialTotalAssets || 0) * 0.002;
             const salaryWan = round2(empCount * perSalaryWan);
             //子公司营业成本
             const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.18));
@@ -6487,12 +6480,14 @@ createApp({
   increaseSalary(id) {
     const cur = Number(this.meetingForm.salaries[id]) || 0;
     this.meetingForm.salaries[id] = Math.round(cur * 1.05);
-	setTimeout(() => { this.showSalaryOpt = false; }, 50000);
+    this.showSalaryOpt = false
+	  setTimeout(() => { this.showSalaryOpt = true; }, 50000);
   },
   decreaseSalary(id) {
     const cur = Number(this.meetingForm.salaries[id]) || 0;
     this.meetingForm.salaries[id] = Math.round(cur * 0.95);
-	setTimeout(() => { this.showSalaryOpt = false; }, 50000);
+	  this.showSalaryOpt = false
+	  setTimeout(() => { this.showSalaryOpt = true; }, 50000);
   },
   closeMeeting() {
     this.meetingVisible = false;
