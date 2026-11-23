@@ -3305,6 +3305,7 @@ function normalizeCompany(company) {
 	  if (a.ceoId && !empIds.has(a.ceoId)) a.ceoId = null;
 	  if (a.secretaryId && !empIds.has(a.secretaryId)) a.secretaryId = null;
 	  if (!Array.isArray(a.assignedEmployees)) a.assignedEmployees = [];
+	  if (!a.monthlyRevenue || typeof a.monthlyRevenue !== 'object') a.monthlyRevenue = {};
 	  a.assignedEmployees = a.assignedEmployees.filter(id => empIds.has(id));
 	});
   if (!company.finance.teamBuildByMonth) company.finance.teamBuildByMonth = {};
@@ -5014,7 +5015,7 @@ createApp({
 	  },
       settleAcquisitions(company, game) {
         const currentDate = new Date(game.currentDate);
-        const currentStr = fmtDate(currentDate);
+        // const currentStr = fmtDate(currentDate);
         let changed = false;
 
         const managers = (company.employees || []).filter(e => e.type === 'manager');
@@ -5023,13 +5024,19 @@ createApp({
         (company.acquisitions || []).forEach(sub => {
           const acquired = new Date(sub.acquiredAt);
           if (isNaN(acquired.getTime())) return;
-
+		 // ---------- 按月收入桶 ----------
+			if (!sub.monthlyRevenue || typeof sub.monthlyRevenue !== 'object') {
+			  sub.monthlyRevenue = {};
+			}
           // ---------- 每周盈利 ----------
           if (!sub.lastWeekSettleDate) sub.lastWeekSettleDate = sub.acquiredAt;
           let lastWeek = new Date(sub.lastWeekSettleDate);
           if (isNaN(lastWeek.getTime())) lastWeek = acquired;
 
           while (dayDiff(lastWeek, currentDate) >= 7) {
+			  lastWeek.setDate(lastWeek.getDate() + 7);
+			   const weekEndStr = fmtDate(lastWeek);
+			    const weekMonth = weekEndStr.slice(0, 7);   // 'YYYY-MM'
             const baseMin = (sub.averNetProfit || 0) * 0.1;
             const baseMax = (sub.averNetProfit || 0) * 0.4;
             //员工越多，子公司收益越大
@@ -5054,11 +5061,12 @@ createApp({
             income = round2(income);
 
             sub.weeklyIncome = income;
-            sub.monthRevenueWan = round2((sub.monthRevenueWan || 0) + income);
+			 sub.monthlyRevenue[weekMonth] = round2((sub.monthlyRevenue[weekMonth] || 0) + income);
+            // sub.monthRevenueWan = round2((sub.monthRevenueWan || 0) + income);
             sub.totalProfitWan = round2((sub.totalProfitWan || 0) + income);
 
-            lastWeek.setDate(lastWeek.getDate() + 7);
-            sub.lastWeekSettleDate = fmtDate(lastWeek);
+            // lastWeek.setDate(lastWeek.getDate() + 7);
+            sub.lastWeekSettleDate = weekEndStr;
             changed = true;
           }
 
@@ -5077,8 +5085,9 @@ createApp({
               sub.lastMonthSettleDate = fmtDate(lastMonth);
               continue;
             }
-
-            const revenue = round2(sub.monthRevenueWan || 0);
+			const monthKey = fmtMonth(monthEnd);
+            const revenue = round2(sub.monthlyRevenue[monthKey] || 0);
+			delete sub.monthlyRevenue[monthKey];
             const empCount = sub.employees || 0;
             const perSalaryWan = 1 + (sub.initialTotalAssets || 0) * 0.002;
             const salaryWan = round2(empCount * perSalaryWan);
@@ -5088,15 +5097,15 @@ createApp({
             const profitWan = round2(revenue - costWan);
 
             sub.currentAssets = round2((sub.currentAssets || sub.initialTotalAssets || 0) + profitWan);
-            game.cash = round2((Number(game.cash) || 0) + profitWan * 10000);
+            // game.cash = round2((Number(game.cash) || 0) + profitWan * 10000);
 
-            sub.reports.push({
-              month: fmtMonth(monthEnd),
-              netAssets: sub.currentAssets,
-              revenue,
-              cost: costWan,
-              profit: profitWan,
-            });
+			 sub.reports.push({
+				month: monthKey,
+				netAssets: sub.currentAssets,
+				revenue,
+				cost: costWan,
+				profit: profitWan,
+			  });
 
             sub.monthRevenueWan = 0;
             lastMonth = nextMonthStart;
@@ -5309,15 +5318,21 @@ createApp({
         game.cash = round2((Number(game.cash) || 0) - totalCost);
 
         // ---------- 生成报表 ----------
-        const acc = calcAccount(game);
-        const receivables = round2(co.receivables?.balance || 0);
-        const assetsWithRecv = round2(acc.totalAssets + receivables);
-        const liabilities = round2(co.loan.balance || 0);
-        const netAssets = round2(assetsWithRecv - liabilities);
-        const prevNet = fin.reports.length
-          ? fin.reports[fin.reports.length - 1].netAssets
-          : fin.initialNetAssets;
-        const income = round2(netAssets - prevNet);
+		const acc = calcAccount(game);
+		const receivables = round2(co.receivables?.balance || 0);
+		const acquisitionAssets = round2((co.acquisitions || []).reduce(
+		  (s, a) => s + (Number(a.currentAssets) || 0) * 10000, 0
+		));
+		const acquisitionLiabilities = round2((co.acquisitions || []).reduce(
+		  (s, a) => s + (Number(a.liabilitiesRemaining) || 0) * 10000, 0
+		));
+		const assetsWithRecv = round2(acc.totalAssets + receivables + acquisitionAssets);
+		const liabilities = round2((co.loan.balance || 0) + acquisitionLiabilities);
+		const netAssets = round2(assetsWithRecv - liabilities);
+		const prevNet = fin.reports.length
+		  ? fin.reports[fin.reports.length - 1].netAssets
+		  : fin.initialNetAssets;
+		const income = round2(netAssets - prevNet);
 
         fin.reports.push({
           month: fin.lastMonth,
