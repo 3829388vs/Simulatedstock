@@ -3070,10 +3070,10 @@ function calcPropertyWeeklyRange(prop) {
   let min = 10000 + landCost / 20 + minRandom;
   let max = 60000 + landCost / 15 + landCost / 20 + maxRandom;
 
-  // 广告投入：万元 → 元，min += 广告/25，max += 广告/13
+  // 广告投入：万元 → 元，min += 广告/21，max += 广告/11
   const adFeeYuan = (Number(prop.adFeeWan) || 0) * 10000;
-  min += adFeeYuan / 25;
-  max += adFeeYuan / 13;
+  min += adFeeYuan / 21;
+  max += adFeeYuan / 11;
 
   return { min, max };
 }
@@ -3370,6 +3370,9 @@ function normalizeCompany(company) {
   if (!Array.isArray(company.products)) company.products = [];
   if (!Array.isArray(company.acquisitions)) company.acquisitions = [];
   if (!Array.isArray(company.pendingHires)) company.pendingHires = [];
+  company.properties.forEach(p => {
+    if (p.img == null || p.img == "") p.img = randomPropertyImage(p.type);
+  });
   company.acquisitions.forEach(a => {
     if (a.weeklyIncome == null) a.weeklyIncome = 0;
     if (a.currentAssets == null) a.currentAssets = a.initialTotalAssets || 0;
@@ -3391,7 +3394,7 @@ function normalizeCompany(company) {
       if (p.totalOperationFee == null)  p.totalOperationFee = 0;
       if (!p.status) p.status = '研发中';
       if (p.rndDays == null) p.rndDays = productRndDays(p.type);
-      if (p.img == null) p.img = randomProductImage(p.type);
+      if (p.img == null || p.img == "") p.img = randomProductImage(p.type);
 	  if (!Array.isArray(p.assignedEmployees)) p.assignedEmployees = [];
     });
 	// 清理已被删除员工的引用（解雇 / 主动离职后自动失效）
