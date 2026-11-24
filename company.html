@@ -1416,7 +1416,7 @@
   <div class="modal">
     <h3>涨薪请求</h3>
     <div style="font-size:14px;line-height:1.8;color:#c9d1d9">
-      <b>{{ raiseQueue[0].name }}</b> 要求涨薪 10%，由
+      <b>{{ raiseQueue[0].name }}</b>({{raiseQueue[0].position}}) 要求涨薪 10%，由
       <b>{{ raiseQueue[0].oldSalary.toLocaleString() }}</b> 元涨到
       <b>{{ raiseQueue[0].newSalary.toLocaleString() }}</b> 元，你是否愿意？
     </div>
@@ -2979,12 +2979,12 @@ function productColor(type) {
 }
 
 function productRndDays(type) {
-  let needDays = ['半导体材料及芯片', '计算机软硬件', '车辆', '医疗器械'].includes(type) ? 60 : 25
+  let needDays = ['半导体材料及芯片', '计算机软硬件', '车辆', '医疗器械'].includes(type) ? 50 : 25
   const company = normalizeCompany(readCompany());
   //研发工程师和项目经理能缩短研发时间
   (company.employees || []).forEach(e => {
     if (e.position === '研发工程师' || e.position === '项目经理') {
-      if(needDays > 9) needDays = needDays - 3
+      if(needDays > 9) needDays = needDays - 4
     }
   });
   return needDays;
@@ -5285,7 +5285,7 @@ createApp({
           if (dayDiff(last, currentDate) >= 90) {
             const oldSalary = e.salary;
             const newSalary = Math.round(oldSalary * 1.1);
-            this.raiseQueue.push({ id: e.id, name: e.name, oldSalary, newSalary });
+            this.raiseQueue.push({ id: e.id, name: e.name, oldSalary, newSalary,position: e.position?e.position:e.role });
           }
         });
       },
