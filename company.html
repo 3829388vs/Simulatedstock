@@ -972,7 +972,7 @@
         <div class="stat">
           <div class="label">子公司上周盈利合计</div>
           <div class="value" :class="pnlClass(acquisitionRevenueWeekly)">{{ fmtBigSigned(acquisitionRevenueWeekly * 10000) }}</div>
-        <div class="sub">子公司盈利每月入公司账户</div>
+        <div class="sub">子公司月净利润每月按分红比例（默认母公司持股80%）给公司分红</div>
 		</div>
       </div>
 
@@ -990,8 +990,11 @@
               <span v-if="s.ceoId">CEO 已分配</span>
               <span v-if="s.secretaryId" style="margin-left:8px">秘书已分配</span>
             </div>
-			<div class="project-income-row">
+			        <div class="project-income-row">
               <span>上周盈利：<b :class="pnlClass(s.weeklyIncome)">{{ s.weeklyIncome }} 万元</b></span>
+            </div>
+            <div class="project-meta" v-if="(s.lastDividendWan || 0) > 0">
+              上月分红：<span class="up">{{ fmtBig(s.lastDividendWan * 10000) }}</span>
             </div>
           </div>
         </div>
@@ -1630,6 +1633,19 @@
       <div class="row"><span>当前净资产</span><span>{{ subsidiaryDetail.currentAssets }} 万元</span></div>
       <div class="row"><span>剩余负债</span><span>{{ subsidiaryDetail.liabilitiesRemaining }} 万元</span></div>
       <div class="row"><span>上周盈利</span><span :class="pnlClass(subsidiaryDetail.weeklyIncome)">{{ subsidiaryDetail.weeklyIncome }} 万元</span></div>
+      <div style="margin-top:14px;border-top:1px solid #21262d;padding-top:12px">
+        <div class="form-item">
+          <label>利润分红比例（0% ~ 100%，剩余留存子公司）</label>
+          <input type="number" min="0" max="100" step="1"
+                :value="Math.round((subsidiaryDetail.dividendRate || 0.8) * 100)"
+                @change="setSubDividendRate({ target: { value: ($event.target.value / 100) } })"
+                style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+        </div>
+        <div class="row">
+          <span>上月分红</span>
+          <span class="up">{{ fmtBig((subsidiaryDetail.lastDividendWan || 0) * 10000) }}</span>
+        </div>
+      </div>
       <div style="margin-top:14px;border-top:1px solid #21262d;padding-top:12px">
         <div class="form-item">
           <label>分配 CEO-首席执行官（周收益 +20%）</label>
@@ -3306,6 +3322,8 @@ function normalizeCompany(company) {
 	  if (a.secretaryId && !empIds.has(a.secretaryId)) a.secretaryId = null;
 	  if (!Array.isArray(a.assignedEmployees)) a.assignedEmployees = [];
 	  if (!a.monthlyRevenue || typeof a.monthlyRevenue !== 'object') a.monthlyRevenue = {};
+    if (a.dividendRate == null) a.dividendRate = 0.8;
+    if (a.lastDividendWan == null) a.lastDividendWan = 0;
 	  a.assignedEmployees = a.assignedEmployees.filter(id => empIds.has(id));
 	});
   if (!company.finance.teamBuildByMonth) company.finance.teamBuildByMonth = {};
@@ -5094,18 +5112,28 @@ createApp({
             //子公司营业成本
             const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.18));
             const costWan = round2(salaryWan + opCostWan);
-            const profitWan = round2(revenue - costWan);
+           const profitWan = round2(revenue - costWan);
+            const rate = Math.min(1, Math.max(0, Number(sub.dividendRate) || 0));
 
-            sub.currentAssets = round2((sub.currentAssets || sub.initialTotalAssets || 0) + profitWan);
-            // game.cash = round2((Number(game.cash) || 0) + profitWan * 10000);
+            let dividendWan = 0;
+            if (profitWan > 0 && rate > 0) {
+              dividendWan = round2(profitWan * rate);
+              game.cash = round2((Number(game.cash) || 0) + dividendWan * 10000);
+            }
+            sub.lastDividendWan = dividendWan;
 
-			 sub.reports.push({
-				month: monthKey,
-				netAssets: sub.currentAssets,
-				revenue,
-				cost: costWan,
-				profit: profitWan,
-			  });
+            const retainWan = round2(profitWan - dividendWan);
+            sub.currentAssets = round2((sub.currentAssets || sub.initialTotalAssets || 0) + retainWan);
+
+            sub.reports.push({
+              month: monthKey,
+              netAssets: sub.currentAssets,
+              revenue,
+              cost: costWan,
+              profit: profitWan,
+              dividend: dividendWan,
+              retained: retainWan,
+            });
 
             sub.monthRevenueWan = 0;
             lastMonth = nextMonthStart;
@@ -6648,9 +6676,11 @@ createApp({
         lastWeekSettleDate: today,
         lastMonthSettleDate: today,
         reports: [],
-		ceoId: null,
-		secretaryId: null,
-		assignedEmployees: [],
+        ceoId: null,
+        secretaryId: null,
+        assignedEmployees: [],
+        dividendRate: 0.8,
+        lastDividendWan: 0,
       });
 
       writeCompany(company);
@@ -6699,8 +6729,8 @@ createApp({
       if(sub.currentAssets<0){
         if (!confirm(`确定以5万元转让「${sub.name}」？（公司资产为负数，只能以5万元售出）`)) return;
       }else{
-        let zhuanrangFee = (sub.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining * 2
-        if (!confirm(`确定以 ${round2(zhuanrangFee>5?zhuanrangFee:5)} 万元转让「${sub.name}」？（子公司负债抵扣`+sub.liabilitiesRemaining * 2+`万）`)) return;
+        let zhuanrangFee = (sub.currentAssets || 0) * 1.8 - sub.liabilitiesRemaining * 0.5
+        if (!confirm(`确定以 ${round2(zhuanrangFee>5?zhuanrangFee:5)} 万元转让「${sub.name}」？（子公司负债抵扣`+sub.liabilitiesRemaining * 0.5+`万）`)) return;
       }
 
       const game = readGame();
@@ -6710,13 +6740,23 @@ createApp({
       const target = (company.acquisitions || []).find(a => a.id === sub.id);
       if (!target) return;
 
-      const sellWan = sub.currentAssets<0 ? 5:round2((target.currentAssets || 0) * 1.5 - sub.liabilitiesRemaining * 2);
+      const sellWan = sub.currentAssets<0 ? 5:round2((target.currentAssets || 0) * 1.8 - sub.liabilitiesRemaining * 0.5);
       const sellYuan = sellWan * 10000;
       game.cash = round2(Number(game.cash) + sellYuan);
 
       // 子公司剩余负债从母公司总负债中移除
       // 子公司剩余负债随转让一起剥离，不触碰母公司借款与其他子公司
       // （主动还款已体现在 liabilitiesRemaining 里，这里无需再扣）
+
+      // 恢复被借调员工的正常状态
+      (target.assignedEmployees || []).forEach(id => {
+        const stillLent = company.acquisitions.some(a =>
+          a.id !== target.id && (a.assignedEmployees || []).includes(id)
+        );
+        if (stillLent) return;
+        const emp = (company.employees || []).find(e => e.id === id);
+        if (emp && emp.status === 'lent') emp.status = 'normal';
+      });
 
       company.acquisitions = company.acquisitions.filter(a => a.id !== sub.id);
       writeCompany(company);
@@ -6860,6 +6900,23 @@ createApp({
 	  this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === this.subsidiaryDetail.id);
 	  this.showToast(i >= 0 ? `已取消借调 ${emp.name}` : `已借调 ${emp.name}`);
 	},
+  setSubDividendRate(e) {
+    const sub = this.subsidiaryDetail;
+    if (!sub) return;
+    let rate = Number(e.target.value);
+    if (isNaN(rate)) rate = 0.8;
+    rate = Math.min(1, Math.max(0, rate));
+
+    const company = normalizeCompany(readCompany());
+    const target = (company.acquisitions || []).find(a => a.id === sub.id);
+    if (!target) return;
+
+    target.dividendRate = rate;
+    writeCompany(company);
+    this.refresh();
+    this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === sub.id);
+    this.showToast(`分红比例已设为 ${(rate * 100).toFixed(0)}%`);
+  },
 	productTypeChange(type) {
 
 	}
