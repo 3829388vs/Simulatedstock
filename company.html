@@ -3242,17 +3242,18 @@ const PRODUCT_IMAGE_POOL = {
 	    '奢侈品':       ['https://pic.rmb.bdstatic.com/bjh/3ea1a4f41123/260601/68272160de5272b18e47b4f13a929eba.jpeg', 'https://q2.itc.cn/q_70/images03/20251231/8e394c08130b46dd89e6c42626614f7c.jpeg'],
 };
 
+/** 按置业类型随机取一张图片 */
+function randomPropertyImage(type) {
+  const pool = PROPERTY_IMAGE_POOL[type];
+  if (!pool || !pool.length) return '';
+  return pool[Math.floor(Math.random() * pool.length)] || '';
+}
 function randomProductImage(type) {
   const pool = PRODUCT_IMAGE_POOL[type];
   if (!pool || !pool.length) return '';
   return pool[Math.floor(Math.random() * pool.length)] || '';
 }
 
-/** 产品随机取一张图片 */
-function randomProductImage() {
-  if (!PRODUCT_IMAGE_POOL.length) return '';
-  return PRODUCT_IMAGE_POOL[Math.floor(Math.random() * PRODUCT_IMAGE_POOL.length)] || '';
-}
 /** 按性别 + 年龄选一组头像，组内随机取一张 */
 function pickAvatar(gender, age) {
   const isMale = (gender === '男');
