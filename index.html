@@ -779,7 +779,7 @@ createApp({
       marketPage: 1,      // 选股列表当前页
       marketPageSize: 20, // 每页条数
       /* ---- 时间设置 ---- */
-      dayDuration: 60,        // 一个交易日 = 60 秒
+      dayDuration: 15,        // 一个交易日 = 60 秒
       breakDuration: 13,      // 收盘休息 13 秒
       phase: 'trading',       // 'trading' | 'break'
       phaseStart: 0,
@@ -1203,9 +1203,68 @@ restoreState(saved) {
       this.saveState();
     },
     resetGame() {
-      if (!confirm('确定清空存档并重新开始？')) return;
-      localStorage.removeItem('sim-stock-game-v1');
-      location.reload();
+        if (!confirm('确定清空存档并重新开始？此操作不可恢复。')) return;
+        // 1. 清空持仓与现金
+        this.positions = {};
+        this.cash = 10000;                 // 总资产 = 现金 + 持仓市值 = 10000
+        this.sellQty = {};
+
+        // 2. 时间倒回 2022-03-20
+        const resetDate = new Date(2022, 2, 20);   // 月份 0 起，2 = 3 月
+        this.currentDate = resetDate;
+
+        // 3. 每只股票：裁掉 2022-03-20 之后的 K 线，重置当日状态
+        const resetStr = fmtDate(resetDate);
+        this.stocks.forEach(s => {
+          if (!Array.isArray(s.history)) s.history = [];
+          s.history = s.history.filter(k => k.date <= resetStr);
+
+          // 让价格回到 2022-03-20 当天（或之前最后一根）的收盘价
+          if (s.history.length > 0) {
+            const last = s.history[s.history.length - 1];
+            s.price = last.close;
+            s.prevClose = last.close;
+            s.open = last.open;
+            s.targetClose = last.close;
+          } else {
+            // 极端情况：历史被裁空，用种子价兜底
+            const seed = STOCK_SEED.find(x => x.code === s.code);
+            const p = seed ? seed.price : s.price;
+            s.price = p;
+            s.prevClose = p;
+            s.open = p;
+            s.targetClose = p;
+            s.history.push({
+              date: resetStr,
+              open: p, close: p, high: p, low: p,
+            });
+          }
+
+          s.limitUp = round2(s.price * 1.1);
+          s.limitDown = round2(s.price * 0.9);
+          s.upStreak = 0;
+          s.downStreak = 0;
+          s.prevLimitUp = false;
+          s.prevBigGain = false;
+          s._randomPrice = undefined;
+        });
+
+        // 4. 重置时钟，从 2022-03-20 开盘开始
+        this.phase = 'trading';
+        this.phaseStart = Date.now();
+        this.phaseEnd = this.phaseStart + this.dayDuration * 1000;
+        this.remaining = this.dayDuration;
+        this.marketEvent = null;
+
+        // 5. 停掉旧定时器，重新开始 tick
+        clearInterval(this._timer);
+        clearInterval(this._saveTimer);
+        // 6. 立刻落盘
+        this.saveState();
+        // 清掉所有游戏相关 key
+        localStorage.removeItem('sim-stock-company-v1');
+        // 如果之前有定时器，先停掉再刷新
+        location.reload();
     },
     /* ==================== 交易 ==================== */
 
