@@ -5614,7 +5614,7 @@ createApp({
         this.company.employees.forEach(e => {
           const last = new Date(e.lastRaiseDate || e.hireDate);
           if (isNaN(last.getTime())) return;
-          if (dayDiff(last, currentDate) >= 90) {
+          if (dayDiff(last, currentDate) >= 185) {
             const oldSalary = e.salary;
             const newSalary = Math.round(oldSalary * 1.1);
             this.raiseQueue.push({ id: e.id, name: e.name, oldSalary, newSalary,position: e.position?e.position:e.role });
