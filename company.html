@@ -1798,20 +1798,24 @@
             <tr><th>月份</th><th>净资产</th><th>月收入</th><th>支出成本</th><th>月净利润</th></tr>
           </thead>
           <tbody>
-            <tr v-for="r in [...subsidiaryDetail.reports].reverse()" :key="r.month">
+            <tr v-for="r in pagedSubReports" :key="r.month">
               <td>{{ formatMonthLabel(r.month) }}</td>
               <td class="num">{{ r.netAssets }} 万</td>
               <td class="num">{{ r.revenue }} 万</td>
               <td class="num">{{ r.cost }} 万</td>
               <td class="num" :class="pnlClass(r.profit)">{{ r.profit }} 万</td>
             </tr>
-            <tr v-if="subsidiaryDetail.reports.length === 0">
+            <tr v-if="pagedSubReports.length === 0">
               <td colspan="5" class="empty">暂无报表，每月 1 号生成</td>
             </tr>
           </tbody>
         </table>
       </div>
-
+		<div class="pager" v-if="totalSubReportPages > 1">
+		  <button class="speed-btn" :disabled="subReportPage <= 1" @click="subReportPage--">上一页</button>
+		  <span class="pager-info">{{ subReportPage }} / {{ totalSubReportPages }}</span>
+		  <button class="speed-btn" :disabled="subReportPage >= totalSubReportPages" @click="subReportPage++">下一页</button>
+		</div>
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn-ghost" @click="subsidiaryDetail = null">关闭</button>
         <button class="act sell" @click="transferCompany(subsidiaryDetail)">转让</button>
@@ -3908,6 +3912,7 @@ createApp({
 	  monthlyZoom: null,
 	  quarterlyZoom: null,
 	  showSalaryOpt: true,
+	  subReportPage: 1,
     innovModal: null,   // { product, engineers: [], fund: 100 }
 	  productType: {
 	    '食品饮料':         { color: '#3fd07c',maoli: 0.23, tech: false },
@@ -3973,6 +3978,17 @@ createApp({
 		.filter(e => e.type === 'manager' && e.role === '首席财务官').length;
 	  return base + cfoCount * 3000000;
     },
+	subReportsDesc() {
+	  if (!this.subsidiaryDetail) return [];
+	  return [...(this.subsidiaryDetail.reports || [])].reverse();
+	},
+	pagedSubReports() {
+	  const start = (this.subReportPage - 1) * 10;
+	  return this.subReportsDesc.slice(start, start + 10);
+	},
+	totalSubReportPages() {
+	  return Math.max(1, Math.ceil(this.subReportsDesc.length / 10));
+	},
     sortedReports() {
       if (!this.company || !this.company.finance.reports) return [];
       return [...this.company.finance.reports].reverse();
@@ -4310,10 +4326,11 @@ createApp({
       const list = this.productList;
       const totalIncome = list.reduce((s, p) => s + (p.totalIncome || 0), 0);
       const totalRndCost = list.reduce((s, p) =>
-      s + ((Number(p.investWan) || 0) + (Number(p.extraInvestWan) || 0) + (Number(p.innovationFundTotal) || 0)) * 10000, 0);
+        s + ((Number(p.investWan) || 0) + (Number(p.innovationFundTotal) || 0)) * 10000, 0);
+      const totalExtraInvest = list.reduce((s, p) => s + (Number(p.extraInvestWan) || 0) * 10000, 0);
       const totalAdCost = list.reduce((s, p) => s + (Number(p.adFeeWan) || 0) * 10000, 0);
       const totalOpCost = list.reduce((s, p) => s + (p.totalOperationFee || 0), 0);
-      return round2(totalIncome - totalRndCost - totalAdCost - totalOpCost);
+      return round2(totalIncome - totalRndCost - totalExtraInvest - totalAdCost - totalOpCost);
     },
     productFormRndDays() {
       return productRndDays(this.productForm.type);
@@ -5087,9 +5104,9 @@ createApp({
             while (m && m < currentMonth) {
               prod.adEffectV = randomAdEffectV();
               if (prod.patent) {
-                prod.nValue = (Number(prod.nValue) || 0) + 50;
+                prod.nValue = (Number(prod.nValue) || 0) + 60;
               } else {
-                prod.nValue = Math.min(3000, (Number(prod.nValue) || 0) + 200);
+                prod.nValue = Math.min(3000, (Number(prod.nValue) || 0) + 280);
               }
               const [y, mm] = m.split('-').map(Number);
               const next = new Date(y, mm, 1);
@@ -5166,7 +5183,7 @@ createApp({
             const range = calcProductWeeklyRange(prod);
             const prodMult = getMarketMultiplier(company, 'product', prod.type);
             const share = Number(prod.marketShare) || 0;
-            let amount = rand(range.min, range.max) * prodMult * share;
+            let amount = rand(range.min, range.max) * prodMult * (share+0.27);
 			//招募销售和生产工，产品收益增加
 			let staffnum = 0
 			prod.assignedEmployees.forEach(e => {
@@ -7026,6 +7043,7 @@ createApp({
     openSubsidiaryDetail(sub) {
       this.subsidiaryDetail = sub;
       this.subRepayInput = 0;
+	  this.subReportPage = 1;
     },
     repaySubsidiary() {
       const sub = this.subsidiaryDetail;
