@@ -5078,7 +5078,6 @@ createApp({
       settleProductIncome(company, game) {
         const currentDate = new Date(game.currentDate);
           const currentMonth = fmtMonth(currentDate);
-        const winterChance = calcSalesWinterChance(company);
         let changed = false;
 
         (company.products || []).forEach(prod => {
