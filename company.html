@@ -345,6 +345,15 @@
     margin-top: 6px; align-self: flex-start;
     font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600;
   }
+  .patent-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: rgba(210,153,34,.18);
+    color: #e3b341;
+    border: 1px solid rgba(210,153,34,.4);
+    font-weight: 600;
+  }
   /* ---------- 移动端 ---------- */
   @media (max-width: 768px) {
     #app { padding: 10px 10px calc(40px + env(safe-area-inset-bottom, 0px)); }
@@ -744,6 +753,8 @@
             style="font-size:12px;color:#d29922;margin-top:4px">✈ 出差中</div>
 			<div v-if="e.status === 'lent'"
 			     style="font-size:12px;color:#58a6ff;margin-top:4px">🔁 已借调</div>
+           <div v-if="e.status === 'rnd'"
+            style="font-size:12px;color:#a371f7;margin-top:4px">🧪 研发中</div>
             <div class="person-salary">¥{{ e.salary.toLocaleString() }}<span> / 月</span></div>
 
             <div v-if="e.type === 'manager' && managerRoleName(e).indexOf('首席') == -1 && managerRoleName(e).indexOf('法务') == -1" style="font-size:13px;margin-top:6px;color:#8b949e">
@@ -935,15 +946,19 @@
             </div>
           <div class="product-head" :style="{ background: productColor(p.type) + '22' }">
             <span class="product-name">{{ p.name }}</span>
-            <span class="product-type-tag" :style="{ color: productColor(p.type) }">{{ p.type }}</span>
+            <span style="display:flex;gap:6px;align-items:center">
+              <span v-if="p.patent" class="patent-tag">🏆 已获专利</span>
+              <span class="product-type-tag" :style="{ color: productColor(p.type) }">{{ p.type }}</span>
+            </span>
           </div>
           <div class="product-body">
             <div class="product-meta">投资金额：{{ p.investWan }} 万元<span v-if="p.extraInvestWan"> + {{ p.extraInvestWan }} 万</span></div>
-            <div class="product-meta">研发周期：{{ p.rndDays }} 天</div>
+            <div class="product-meta" v-if="p.status === '研发中'">研发周期：{{ p.rndDays }} 天</div>
             <div class="product-meta">本周销售额：<span :class="pnlClass(p.weeklyIncome)">{{ fmtBigSigned(p.weeklySellMoney) }}</span></div>
             <div class="product-meta">本周运营费：<span class="down">{{ fmtBig(p.weeklyOperationFee || 0) }}</span></div>
-			<div class="product-meta">产品成本：<span class="down">{{ fmtBig(p.weeklySellMoney*(1 - productType[p.type].maoli) || 0) }}</span></div>
-			<div class="product-meta">运营人员：{{ (p.assignedEmployees || []).length }} 人</div>
+            <div class="product-meta">产品成本：<span class="down">{{ fmtBig(p.weeklySellMoney*(1 - productType[p.type].maoli) || 0) }}</span></div>
+            <div class="product-meta">运营人员：{{ activeAssignedCount(p) }} 人</div>
+            <div class="product-meta">市场份额：{{ ((p.marketShare || 0) * 100).toFixed(2) }}%</div>
             <div class="product-meta">净利润：<span :class="pnlClass(p.totalIncome - p.totalOperationFee)">{{ fmtBigSigned(p.totalIncome - p.totalOperationFee) }}</span></div>
             <div class="product-status"
                 :class="p.status === '研发中' ? 'status-building' : 'status-profit'">
@@ -1060,8 +1075,8 @@
 	             style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
 	    </div>
 	    <div class="form-item">
-	      <label>年利率（2 ~ 80，单位 %）</label>
-	      <input v-model.number="financeRate" type="number" min="2" max="80" step="1"
+	      <label>年利率（2 ~ 100，单位 %）</label>
+	      <input v-model.number="financeRate" type="number" min="2" max="100" step="1"
 	             style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
 	    </div>
 	    <button class="act" style="width:100%" @click="confirmFinance">确认</button>
@@ -1178,7 +1193,8 @@
           style="margin-top:12px;padding:8px 12px;background:rgba(245,72,77,.1);
                   border:1px solid rgba(245,72,77,.35);border-radius:8px;
                   font-size:12px;color:#ff7b72;line-height:1.6">
-        当前每名高管需配至少 4 名普通员工，请先在「招聘管理」中招聘普通员工。
+        当前 1/2 级高管每人需配 4 名普通员工，3/4 级高管每人需配 2 名（{{ managerCount }} 名高管 / {{ staffCount }} 名员工），
+        请先在「招聘管理」中招聘普通员工。
       </div>
       <div class="modal-actions">
         <button class="btn-ghost" @click="talentDetail = null">取消</button>
@@ -1568,6 +1584,9 @@
       <div class="row"><span>累计运营费</span><span class="down">{{ fmtBig(productDetail.totalOperationFee || 0) }}</span></div>
       <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">每有1位【运营】员工，减少运营成本8%</div>
       <div class="row"><span>状态</span><span>{{ productDetail.status }}</span></div>
+      <div class="row"><span>市场份额</span><span>{{ ((productDetail.marketShare || 0) * 100).toFixed(2) }}%</span></div>
+      <div class="row" v-if="productDetail.patent"><span>专利</span><span class="up">🏆 已获专利</span></div>
+      <div class="row" v-if="productDetail.innovation"><span>创新研发</span><span class="up">研发中（至 {{ productDetail.innovation.endDate }}）</span></div>
       <div class="row"><span>本周销售额</span><span :class="pnlClass(productDetail.weeklyIncome)">{{ fmtBigSigned(productDetail.weeklySellMoney) }}</span></div>
       <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6;text-align: right;">运营人员为【销售】或【生产工】或【产品经理】员工，收益增加。销售>生产工和产品经理</div>
       <div class="row"><span>总收益</span><span :class="pnlClass(productDetail.totalIncome)">{{ fmtBigSigned(productDetail.totalIncome) }}</span></div>
@@ -1582,7 +1601,7 @@
         <button class="act" style="width:100%" @click="investProductExtra">追加投资</button>
 		<div style="margin-top:16px;border-top:1px solid #21262d;padding-top:12px">
 		  <div style="font-size:13px;color:#8b949e;margin-bottom:8px">
-			运营人员：
+			运营人员（不含出差、借调）：
 		  </div>
 		  <div style="max-height:32vh;overflow-y:auto">
 			<label v-for="e in availableProductEmployees" :key="e.id"
@@ -1598,7 +1617,7 @@
 			</div>
 		  </div>
 		  <div style="font-size:12px;color:#6e7681;margin-top:6px">
-			已分配 {{ (productDetail.assignedEmployees || []).length }} 人
+			已分配 {{ activeAssignedCount(productDetail) }} 人
 		  </div>
 		</div>
         <div class="form-item" style="margin-top:14px">
@@ -1606,19 +1625,68 @@
           <input v-model.number="productAdInput" type="number" min="0" step="1"
                 style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
           <div style="font-size:11px;color:#6e7681;margin-top:6px;line-height:1.6">
-            每周最小收益增加
-            <b style="color:#e6edf3">{{ ((Number(productAdInput) || 0) * 10000 / 15).toFixed(0) }}</b> 元，
-            最大收益增加
-            <b style="color:#e6edf3">{{ ((Number(productAdInput) || 0) * 10000 / 5).toFixed(0) }}</b> 元。
+            投入广告费将提升产品市场份额占比。
           </div>
         </div>
         <button class="act" style="width:100%" @click="investProductAd">投入广告</button>
+        <button class="act" style="width:100%;margin-top:10px"
+                :disabled="!!productDetail.innovation"
+                @click="openInnovation(productDetail)">
+          {{ productDetail.innovation ? '创新研发中…' : '🧪 产品创新' }}
+        </button>
       </template>
 
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn-ghost" @click="productDetail = null">关闭</button>
         <button v-if="productDetail.status === '销售中'"
                 class="act sell" @click="removeProduct(productDetail)">移除产品</button>
+      </div>
+    </div>
+  </div>
+  <div v-if="innovModal" class="modal-mask" @click.self="innovModal = null">
+    <div class="modal" style="max-width:560px">
+      <h3>产品创新 · {{ innovModal.product.name }}</h3>
+      <div style="font-size:12px;color:#6e7681;margin-bottom:12px">
+        创新研发为期 7 天，成功后产品获得专利，市场份额显著提升。
+      </div>
+
+      <div class="form-item">
+        <label>研发人员（只能选研发工程师，可多选）</label>
+        <div style="max-height:32vh;overflow-y:auto;border:1px solid #21262d;border-radius:8px;padding:4px 8px">
+          <label v-for="e in availableInnovationEngineers" :key="e.id"
+                style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #1c2128;cursor:pointer">
+            <input type="checkbox"
+                  :checked="innovModal.engineers.includes(e.id)"
+                  @change="toggleInnovEngineer(e.id)">
+            <span>{{ e.name }}</span>
+            <span style="font-size:12px;color:#8b949e">{{ e.position }}</span>
+          </label>
+          <div v-if="availableInnovationEngineers.length === 0" class="empty" style="padding:16px 0">
+            暂无可用的研发工程师
+          </div>
+        </div>
+      </div>
+
+      <div class="form-item">
+        <label>投入研发资金（万元，≥100 的整数，计入产品研发投入）</label>
+        <input v-model.number="innovModal.fund" type="number" min="100" step="1"
+              style="width:100%;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px 12px;font-size:14px">
+      </div>
+
+      <div class="property-calc-box">
+        <div class="row">
+          <span>参与工程师</span>
+          <span>{{ innovModal.engineers.length }} 人</span>
+        </div>
+        <div class="row">
+          <span>预计成功率</span>
+          <span class="up">{{ ((0.1 + innovModal.engineers.length * 0.07 + (Number(innovModal.fund) || 0) / 1200) * 100).toFixed(1) }}%</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-ghost" @click="innovModal = null">取消</button>
+        <button class="act" @click="submitInnovation">提交创新</button>
       </div>
     </div>
   </div>
@@ -1764,7 +1832,7 @@ const DAILY_RATE = 0.08 / 365;   // 年利率 8%，按日复利
 const WEEK_LEN = 7;
 /* 金融业务：还款金额随年利率放大 */
 const REPAY_RATE_BASE = 12;          // 基准年利率
-const REPAY_RATE_SPAN = 68;          // 满量程 = 80 - 12
+const REPAY_RATE_SPAN = 88;          // 满量程 = 100 - 12
 const REPAY_RATE_SENSITIVITY = 2;  // 满量程还款乘数变化量
 const projectList = [
   {
@@ -1814,6 +1882,18 @@ const projectList = [
     deadline: 30,
     needPersons: 1,
     details: "蜜雪冰城聚焦单价约6元的高质平价现制果饮、茶饮、冰淇淋与咖啡，以加盟模式为主构建覆盖全球的门店网络，并通过自建供应链向加盟商销售食材与设备，形成“供应链+品牌IP+门店运营”体系。"
+  },
+  {
+    name: "深圳市南山区深南大道607菜鸟驿站（世界之窗店）",
+    type: "商铺",
+    price: 65,
+    img: "https://pic1.58cdn.com.cn/wuxian/h5/n_v3a0d19787c51c49af8059450acfb00b3b.jpg",
+    minHuibao: 65000,
+    maxHuibao: 150000,
+    needAd: true,
+    deadline: 50,
+    needPersons: 1,
+    details: "菜鸟驿站"
   },
   {
     name: "深圳市福田区福田街道福安社区皇庭广场4楼412喜茶商铺融资",
@@ -1924,6 +2004,42 @@ const projectList = [
     details: "永辉超市股份有限公司成立于2000年,是中国领先的零售企业。作为国内首批将生鲜农产品引进现代超市的流通企业之一,永辉超市被国家七部委誉为中国“农改超”的典范。"
   },
   {
+    name: "深圳市罗湖区南湖街道罗湖社区人民南路国贸地铁站金光华广场3F未来游戏城",
+    type: "商铺",
+    price: 375,
+    img: "https://img0.baidu.com/it/u=2041650617,2162033563&fm=253&app=138&f=JPEG?w=500&h=667",
+    minHuibao: 220000,
+    maxHuibao: 650000,
+    needAd: false,
+    deadline: 65,
+    needPersons: 2,
+    details: "金光华广场游戏厅融资建设，客流量大，地处深圳繁华地带。"
+  },
+  {
+    name: "珠海市金湾区工业大道2099号大亚湾产业园融资",
+    type: "地产",
+    price: 1079,
+    img: "https://q3.itc.cn/images01/20260408/a503d38df76d4e458dd6b12202b481c1.png",
+    minHuibao: 480000,
+    maxHuibao: 1180000,
+    needAd: false,
+    deadline: 93,
+    needPersons: 3,
+    details: "大亚湾产业园，融合各种工业产业。"
+  },
+  {
+    name: "深圳市龙岗区葵涌街道官湖社区官湖海岸海滩建设",
+    type: "景区",
+    price: 1335,
+    img: "https://pic.rmb.bdstatic.com/bjh/news/7c27b1c8d751f1177dd87a01ff3a66f0.png",
+    minHuibao: 1280000,
+    maxHuibao: 2280000,
+    needAd: true,
+    deadline: 60,
+    needPersons: 2,
+    details: "大亚湾产业园，融合各种工业产业。"
+  },
+  {
     name: "广州赛博医疗器械融资",
     type: "医疗",
     price: 1200,
@@ -2006,6 +2122,18 @@ const projectList = [
       deadline: 95,
       needPersons: 2,
       details: "南朗镇深海海域布局20组智能深水网箱，养殖金鲳鱼、石斑鱼等高端海产，配套建设陆上深加工基地。"
+    },
+    {
+      name: "空中机车项目融资",
+      type: "科技",
+      price: 1750,
+      img: "https://q4.itc.cn/q_70/images03/20250701/b3c5c2c88ede45a698e13e20ade69206.jpeg",
+      minHuibao: 690000,
+      maxHuibao: 1350000,
+      needAd: false,
+      deadline: 135,
+      needPersons: 4,
+      details: "高域公司携其明星产品——飞行汽车GOVY AirCab惊艳亮相，迅速成为全场焦点。这款飞行汽车凭借其突破性的创新技术和前瞻的出行理念，生动诠释了新质生产力的无限可能。GOVY AirCab不仅展现了未来出行的全新形态，更以其卓越表现赢得了现场观众和行业专家的高度赞誉。"
     },
     {
       name: "佛山市三水区氢能燃料电池核心部件产线",
@@ -2336,13 +2464,13 @@ const companyList = [
   {
     id: 4,
     name: "极兔物流",
-    totalAssets: 3200,
+    totalAssets: 3220,
     liabilities: 1800,
     industry: "物流运输",
     mainProducts: "同城配送、跨境货运",
     img: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&h=300&fit=crop",
-    averNetProfit: 400,
-    employees: 1200,
+    averNetProfit: 579,
+    employees: 610,
     address: "上海市浦东新区物流园"
   },
   {
@@ -2365,7 +2493,7 @@ const companyList = [
     industry: "广告传媒",
     mainProducts: "品牌策划、数字营销",
     img: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=600&h=300&fit=crop",
-    averNetProfit: 80,
+    averNetProfit: 95,
     employees: 45,
     address: "北京市朝阳区CBD中心"
   },
@@ -2377,7 +2505,7 @@ const companyList = [
     industry: "电子元器件",
     mainProducts: "芯片封装、传感器",
     img: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&h=300&fit=crop",
-    averNetProfit: 550,
+    averNetProfit: 590,
     employees: 980,
     address: "无锡市高新区微电子园"
   },
@@ -2389,7 +2517,7 @@ const companyList = [
     industry: "酒店管理",
     mainProducts: "连锁酒店运营、餐饮服务",
     img: "https://p0.meituan.net/hotelbiz/b66a466b2fd9f0b2d8661db96b4201711308685.jpg",
-    averNetProfit: 1820,
+    averNetProfit: 2320,
     employees: 352,
     address: "北京市西城区"
   },
@@ -2408,13 +2536,13 @@ const companyList = [
   {
     id: 10,
     name: "蓝海能源",
-    totalAssets: 8000,
-    liabilities: 4500,
+    totalAssets: 1320,
+    liabilities: 833,
     industry: "新能源",
     mainProducts: "太阳能电池板、储能设备",
     img: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&h=300&fit=crop",
-    averNetProfit: 900,
-    employees: 1500,
+    averNetProfit: 127,
+    employees: 106,
     address: "合肥市高新区光伏路"
   },
   {
@@ -2467,14 +2595,14 @@ const companyList = [
   },
   {
     id: 15,
-    name: "时尚服饰",
-    totalAssets: 1100,
-    liabilities: 500,
+    name: "南极人",
+    totalAssets: 153960,
+    liabilities: 70122,
     industry: "服装零售",
-    mainProducts: "快时尚女装、配饰",
-    img: "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&h=300&fit=crop",
-    averNetProfit: 130,
-    employees: 210,
+    mainProducts: "南极人是成立于1997年的中国内衣品牌，1998年正式成立公司，创始人为张玉祥，初期以保暖内衣产品闻名。2008年起转型为品牌授权公司。",
+    img: "https://img.phb123.com/uploads/allimg/210630/798-210630140206-56.jpg",
+    averNetProfit: 12377,
+    employees: 332,
     address: "杭州市余杭区电商园"
   },
   {
@@ -2848,7 +2976,44 @@ const companyList = [
     averNetProfit: 21680,
     employees: 2123,
     address: "中国香港九龙弥敦道229号"
+  },
+  {
+    id: 61,
+    name: "晨光股份",
+    totalAssets: 890129,
+    liabilities: 96752,
+    industry: "文化用品",
+    mainProducts: "上海晨光文具股份有限公司作为全球最大的文具制造商之一,晨光文具是一家整合创意价值与服务优势的综合文具供应商,致力于让学习和工作更快乐、更高效。产品涵盖书写工具、学生文具、办公文具及其他相关产品。",
+    img: "https://pic.rmb.bdstatic.com/bjh/news/fdcc64ee117761879991c644b4c49a5d.jpeg",
+    averNetProfit: 51023,
+    employees: 5356,
+    address: "上海市松江区新桥镇千帆路288弄5号"
+  },
+  {
+    id: 62,
+    name: "知品玩具",
+    totalAssets: 2077,
+    liabilities: 522,
+    industry: "玩具制造",
+    mainProducts: "专业生产和加工各类内销毛绒玩具, 七寸抓机娃娃生产厂家 ,建立于2000年,坐落于美丽开放的青岛胶州,交通便利,优越的人文与自然环境正促进着工厂蓬勃发展",
+    img: "https://img1.baidu.com/it/u=3880752254,592950290&fm=3169&app=3169&f=WEBP?w=800&h=800",
+    averNetProfit: 388,
+    employees: 109,
+    address: "青岛胶州"
+  },
+  {
+    id: 63,
+    name: "爱依服(IEF)",
+    totalAssets: 1030661,
+    liabilities: 120550,
+    industry: "时尚女装",
+    mainProducts: "‌爱依服是2004年创立的快时尚女装品牌‌，隶属于广东爱依服商贸有限公司，主打18-38岁女性的“欧日韩”潮流服饰",
+    img: "https://img1.baidu.com/it/u=3519635135,1744983368&fm=253&fmt=auto&app=120&f=JPEG?w=1052&h=541",
+    averNetProfit: 360200,
+    employees: 672,
+    address: "广东省佛山市南海区"
   }
+  
 ];
 
 const PROJECT_MAP = {};
@@ -3017,37 +3182,44 @@ function productRndDays(type) {
 }
 
 function calcProductWeeklyRange(prod) {
-  const totalInvestWan = (Number(prod.investWan) || 0) + (Number(prod.extraInvestWan) || 0);
-  const investYuan = totalInvestWan * 10000;
-  let min = investYuan / 23;
-  let max = investYuan / 13;
-  const adYuan = (Number(prod.adFeeWan) || 0) * 10000;
-  min += adYuan / 15;
-  max += adYuan / 5;
-  Object.keys(PRODUCT_TYPE_INFO).forEach(e => {
-	  if(prod.type == e){	//毛利高，销售额减小
-	  	  max = max * (1.3 - PRODUCT_TYPE_INFO[e].maoli)
-		  min = min * (1.3 - PRODUCT_TYPE_INFO[e].maoli)
-	  }
-  })
-  
-  return { min, max };
+    const totalInvestWan = (Number(prod.investWan) || 0) + (Number(prod.extraInvestWan) || 0);
+    const investYuan = totalInvestWan * 10000;
+    let minMax = {
+      min: investYuan / 22,
+      max: investYuan / 12,
+    };
+      Object.keys(PRODUCT_TYPE_INFO).forEach(e => {
+      if(prod.type == e){	//毛利高，销售额减小
+          minMax.max = max * (1.3 - PRODUCT_TYPE_INFO[e].maoli)
+          minMax.min = min * (1.3 - PRODUCT_TYPE_INFO[e].maoli)
+      }
+    })
+    return minMax
+}
+/** 广告效益 v：0.6 ~ 2，保留两位小数 */
+function randomAdEffectV() {
+  return round2(0.6 + Math.random() * 1.4);
 }
 
+/**
+ * 市场份额占比 = (投资金额 + 广告费 × v) / (1500 + n)
+ * clamp 到 [0.05, 0.95]
+ */
+function calcMarketShare(prod) {
+  const investWan = (Number(prod.investWan) || 0) + (Number(prod.extraInvestWan) || 0);
+  const adWan = Number(prod.adFeeWan) || 0;
+  const v = prod.adEffectV != null ? Number(prod.adEffectV) : 1;
+  const n = prod.nValue != null ? Number(prod.nValue) : 0;
+  const denom = Math.max(1, 1500 + n);
+  const raw = (investWan + adWan * v) / denom;
+  return Math.min(0.95, Math.max(0.05, round2(raw)));
+}
 function productFinishDate(prod) {
   const d = new Date(prod.investDate);
   d.setDate(d.getDate() + (prod.rndDays || 0));
   return d;
 }
-function calcSalesWinterChance(company) {
-  let chance = 0.3;
-  (company.employees || []).forEach(e => {
-    if (e.type === 'staff' && ['生产工', '销售', '运营'].includes(e.position)) {
-      chance -= 0.01;
-    }
-  });
-  return Math.max(0.17, chance);
-}
+
 /* 计算某物业的周收益范围（元），已包含广告加成 */
 function calcPropertyWeeklyRange(prop) {
   const landCost = Number(prop.landCost) || 0;
@@ -3396,7 +3568,17 @@ function normalizeCompany(company) {
       if (!p.status) p.status = '研发中';
       if (p.rndDays == null) p.rndDays = productRndDays(p.type);
       if (p.img == null || p.img == "") p.img = randomProductImage(p.type);
-	  if (!Array.isArray(p.assignedEmployees)) p.assignedEmployees = [];
+      if (!Array.isArray(p.assignedEmployees)) p.assignedEmployees = [];
+      if (p.adEffectV == null) p.adEffectV = randomAdEffectV();
+      if (p.nValue == null) p.nValue = p.patent ? -300 : 0;
+      if (p.patent == null) p.patent = false;
+      if (p.innovation === undefined) p.innovation = null;
+      if (p.innovationFundTotal == null) p.innovationFundTotal = 0;
+      if (p.lastMonthUpdate == null) {
+        const d = company.foundedAt ? new Date(company.foundedAt) : new Date();
+        p.lastMonthUpdate = isNaN(d.getTime()) ? fmtMonth(new Date()) : fmtMonth(d);
+      }
+      if (p.marketShare == null) p.marketShare = calcMarketShare(p);
     });
 	// 清理已被删除员工的引用（解雇 / 主动离职后自动失效）
 	const empIds = new Set((company.employees || []).map(e => e.id));
@@ -3726,6 +3908,7 @@ createApp({
 	  monthlyZoom: null,
 	  quarterlyZoom: null,
 	  showSalaryOpt: true,
+    innovModal: null,   // { product, engineers: [], fund: 100 }
 	  productType: {
 	    '食品饮料':         { color: '#3fd07c',maoli: 0.23, tech: false },
 	    '建筑建材':         { color: '#d29922',maoli: 0.37, tech: false },
@@ -3837,9 +4020,11 @@ createApp({
         ...(this.company.employees || []),
         ...(this.company.pendingHires || []),
       ];
-      const managers = all.filter(e => e.type === 'manager').length;
-      const staffs   = all.filter(e => e.type === 'staff').length;
-      return staffs < managers * 4;
+      const managers = all.filter(e => e.type === 'manager');
+      const m12 = managers.filter(m => (m.level || 4) <= 2).length;
+      const m34 = managers.filter(m => (m.level || 4) >= 3).length;
+      const staffs = all.filter(e => e.type === 'staff').length;
+      return staffs < m12 * 4 + m34 * 2;
     },
     hrTabs() {
       if (!this.company) return [{ key: 'all', name: '全部' }];
@@ -4125,7 +4310,7 @@ createApp({
       const list = this.productList;
       const totalIncome = list.reduce((s, p) => s + (p.totalIncome || 0), 0);
       const totalRndCost = list.reduce((s, p) =>
-        s + ((Number(p.investWan) || 0) + (Number(p.extraInvestWan) || 0)) * 10000, 0);
+      s + ((Number(p.investWan) || 0) + (Number(p.extraInvestWan) || 0) + (Number(p.innovationFundTotal) || 0)) * 10000, 0);
       const totalAdCost = list.reduce((s, p) => s + (Number(p.adFeeWan) || 0) * 10000, 0);
       const totalOpCost = list.reduce((s, p) => s + (p.totalOperationFee || 0), 0);
       return round2(totalIncome - totalRndCost - totalAdCost - totalOpCost);
@@ -4148,16 +4333,7 @@ createApp({
     totalOperationFee() {
       return round2(this.productList.reduce((s, p) => s + (p.totalOperationFee || 0), 0));
     },
-    salesWinterChance() {
-      if (!this.company) return 0.36;
-      let chance = 0.36;
-      (this.company.employees || []).forEach(e => {
-        if (e.type === 'staff' && ['生产工', '销售', '运营'].includes(e.position)) {
-          chance -= 0.01;
-        }
-      });
-      return Math.max(0.15, chance);
-    },
+
 	pendingHiresCount() {
 	  return (this.company?.pendingHires || []).length;
 	},
@@ -4278,6 +4454,12 @@ createApp({
     }
     return MARKET_ENVIRONMENTS.find(e => e.id === this.company.marketEnv.id)
         || MARKET_ENVIRONMENTS.find(e => e.id === 'stable');
+  },
+  availableInnovationEngineers() {
+    if (!this.company) return [];
+    return (this.company.employees || []).filter(e =>
+      e.type === 'staff' && e.position === '研发工程师' && e.status === 'normal'
+    );
   },
   },
   watch: {
@@ -4895,10 +5077,57 @@ createApp({
       //产品收入
       settleProductIncome(company, game) {
         const currentDate = new Date(game.currentDate);
+          const currentMonth = fmtMonth(currentDate);
         const winterChance = calcSalesWinterChance(company);
         let changed = false;
 
         (company.products || []).forEach(prod => {
+              // ---------- 每月 1 号：更新 v / n / 份额 ----------
+          if (prod.lastMonthUpdate !== currentMonth) {
+            let m = prod.lastMonthUpdate;
+            while (m && m < currentMonth) {
+              prod.adEffectV = randomAdEffectV();
+              if (prod.patent) {
+                prod.nValue = (Number(prod.nValue) || 0) + 50;
+              } else {
+                prod.nValue = Math.min(3000, (Number(prod.nValue) || 0) + 200);
+              }
+              const [y, mm] = m.split('-').map(Number);
+              const next = new Date(y, mm, 1);
+              m = fmtMonth(next);
+            }
+            prod.marketShare = calcMarketShare(prod);
+            prod.lastMonthUpdate = currentMonth;
+            changed = true;
+          }
+
+          // ---------- 产品创新到期结算 ----------
+          if (prod.innovation && prod.innovation.status === 'rnd') {
+            const end = new Date(prod.innovation.endDate);
+            if (!isNaN(end.getTime()) && currentDate >= end) {
+              const engCount = (prod.innovation.engineers || []).length;
+              const fund = Number(prod.innovation.fund) || 0;
+              let successRate = 0.1 + engCount * 0.07 + fund / 1200;
+              successRate = Math.min(1, successRate);
+              const success = Math.random() < successRate;
+
+              if (success) {
+                prod.patent = true;
+                prod.nValue = -300;
+                prod.marketShare = calcMarketShare(prod);
+                this._pendingNotices.push(`「${prod.name}」产品创新成功，获得专利！`);
+              } else {
+                this._pendingNotices.push(`「${prod.name}」产品创新失败`);
+              }
+
+              (prod.innovation.engineers || []).forEach(id => {
+                const emp = (company.employees || []).find(e => e.id === id);
+                if (emp && emp.status === 'rnd') emp.status = 'normal';
+              });
+              prod.innovation = null;
+              changed = true;
+            }
+          }
           const finish = productFinishDate(prod);
 
           if (currentDate < finish) {
@@ -4918,16 +5147,16 @@ createApp({
           }
 
           while (dayDiff(lastSettle, currentDate) >= 7) {
-            // 产品运营费：研发费用 × 0.6%~1.3%
+            // 产品运营费：研发费用 × 0.9%~2.2%
             const rndCost = (Number(prod.investWan) || 0) * 10000;
-            const opFee = Math.round(rndCost * rand(0.006, 0.013));
+            const opFee = Math.round(rndCost * rand(0.009, 0.022));
             let yunyinNum = 0
               prod.assignedEmployees.forEach(e => {
               	company.employees.forEach(i=>{
-					if (e == i.id && i.position === '运营' && yunyinNum < 8) {
-					  yunyinNum += 1
-					}
-				})
+                  if (e == i.id && i.position === '运营' && yunyinNum < 8 && i.status === 'normal') {
+                    yunyinNum += 1
+                  }
+                })
               });
             let opFee2 = round2(opFee * (1 - 0.08 * yunyinNum)+9000)
             game.cash = round2((Number(game.cash) || 0) - opFee2);
@@ -4937,26 +5166,27 @@ createApp({
             // 收益
             const range = calcProductWeeklyRange(prod);
             const prodMult = getMarketMultiplier(company, 'product', prod.type);
-            let amount = rand(range.min, range.max) * prodMult;;
+            const share = Number(prod.marketShare) || 0;
+            let amount = rand(range.min, range.max) * prodMult * share;
 			//招募销售和生产工，产品收益增加
 			let staffnum = 0
 			prod.assignedEmployees.forEach(e => {
 				company.employees.forEach(i=>{
-					if (e == i.id && i.position == '销售') {
+					if (e == i.id && i.position == '销售' && i.status === 'normal') {
 						if(staffnum < 30) staffnum += 2
 					}
-					if (e == i.id && i.position == '生产工') {
+					if (e == i.id && i.position == '生产工' && i.status === 'normal') {
 						if(staffnum < 30) staffnum += 1
 					}
-					if (e == i.id && i.position == '产品经理') {
+					if (e == i.id && i.position == '产品经理' && i.status === 'normal') {
 						if(staffnum < 30) staffnum += 1
 					}
 				})
 			});
-			//产品收益增加，最多2.2倍
-			amount = amount * (1+staffnum*0.04)
+			//产品收益增加，最多2.5倍
+			amount = amount * (1+staffnum*0.05)
 			// 销售寒冬：命中后收入 ×0.3
-			if (Math.random() < winterChance) amount *= 0.3;
+			if (Math.random() < 0.26) amount *= 0.3;
 			
 			let weeklySellMoney = amount
 			Object.keys(PRODUCT_TYPE_INFO).forEach(e => {
@@ -5854,12 +6084,18 @@ createApp({
           investDate: today,
           rndDays: productRndDays(f.type),
           img: randomProductImage(f.type),
+          adEffectV: randomAdEffectV(),
+          nValue: 0,
+          patent: false,
+          innovation: null,
+          innovationFundTotal: 0,
+          lastMonthUpdate: fmtMonth(new Date(game.currentDate)),
           status: '研发中',
           weeklyIncome: 0,
           totalIncome: 0,
           lastSettleDate: null,
         });
-
+        company.products[company.products.length - 1].marketShare = calcMarketShare(company.products[company.products.length - 1]);
         writeCompany(company);
         writeGame(game);
         this.showProductForm = false;
@@ -5889,6 +6125,7 @@ createApp({
 
         game.cash = round2(Number(game.cash) - cost);
         target.adFeeWan = round2((target.adFeeWan || 0) + wan);
+        target.marketShare = calcMarketShare(target);
 
         writeCompany(company);
         writeGame(game);
@@ -5917,6 +6154,7 @@ createApp({
 
         game.cash = round2(Number(game.cash) - cost);
         target.extraInvestWan = round2((target.extraInvestWan || 0) + wan);
+        target.marketShare = calcMarketShare(target);
 
         writeCompany(company);
         writeGame(game);
@@ -6137,11 +6375,15 @@ createApp({
         }
         // 招聘管理人员前检查：当前每位高管需至少 4 名普通员工
         if (person.type === 'manager') {
-          const managers = company.employees.filter(e => e.type === 'manager').length;
-          const staffs   = company.employees.filter(e => e.type === 'staff').length;
-          if (staffs < managers * 4) {
-            const need = managers * 4 - staffs;
-            return this.showToast(`每名高管需配至少 4 名普通员工，还需再招 ${need} 名普通员工才能招聘新高管`);
+          const all = [...(company.employees || []), ...(company.pendingHires || [])];
+          const managers = all.filter(e => e.type === 'manager');
+          const m12 = managers.filter(m => (m.level || 4) <= 2).length;
+          const m34 = managers.filter(m => (m.level || 4) >= 3).length;
+          const staffs = all.filter(e => e.type === 'staff').length;
+          const required = m12 * 4 + m34 * 2;
+          if (staffs < required) {
+            const need = required - staffs;
+            return this.showToast(`每名1/2级高管需配4名普通员工，3/4级高管需配2名，还需再招 ${need} 名普通员工才能招聘新高管`);
           }
         }
 		if (person.role === '首席财务官') {
@@ -6250,9 +6492,14 @@ createApp({
       company.investments.forEach(inv => {
         inv.assignedEmployees = (inv.assignedEmployees || []).filter(id => id !== emp.id);
       });
-	  company.acquisitions.forEach(a => {
-	    a.assignedEmployees = (a.assignedEmployees || []).filter(id => id !== emp.id);
-	  });
+      company.acquisitions.forEach(a => {
+        a.assignedEmployees = (a.assignedEmployees || []).filter(id => id !== emp.id);
+      });
+      (company.products || []).forEach(prod => {
+        if (prod.innovation && Array.isArray(prod.innovation.engineers)) {
+          prod.innovation.engineers = prod.innovation.engineers.filter(id => id !== emp.id);
+        }
+      });
       writeCompany(company);
 
       this.refresh();
@@ -6896,7 +7143,7 @@ createApp({
 	  if (!game || !company) return;
 	
 	  const rate = Math.round(Number(this.financeRate));
-	  if (!(rate >= 2 && rate <= 80)) return this.showToast('年利率必须是 2~80 的整数');
+	  if (!(rate >= 2 && rate <= 100)) return this.showToast('年利率必须是 2~100 的整数');
 	
 	  const injectWan = Math.floor(Number(this.financeInject) || 0);
 	  if (injectWan < 0) return this.showToast('注入金额不能为负');
@@ -7004,6 +7251,81 @@ createApp({
     this.refresh();
     this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === sub.id);
     this.showToast(`分红比例已设为 ${(rate * 100).toFixed(0)}%`);
+  },
+  activeAssignedCount(prod) {
+    if (!prod) return 0;
+    const ids = prod.assignedEmployees || [];
+    return ids.filter(id => {
+      const emp = (this.company?.employees || []).find(e => e.id === id);
+      return emp && emp.status === 'normal';
+    }).length;
+  },
+  /* ==================== 产品创新 ==================== */
+  openInnovation(prod) {
+    if (!prod) return;
+    if (prod.status !== '销售中') return this.showToast('只有销售中的产品可以创新');
+    if (prod.innovation) return this.showToast('该产品正在创新研发中');
+    this.innovModal = { product: prod, engineers: [], fund: 100 };
+  },
+  toggleInnovEngineer(id) {
+    if (!this.innovModal) return;
+    const arr = this.innovModal.engineers;
+    const i = arr.indexOf(id);
+    if (i >= 0) arr.splice(i, 1); else arr.push(id);
+  },
+  submitInnovation() {
+    const modal = this.innovModal;
+    if (!modal) return;
+    const game = readGame();
+    const company = normalizeCompany(readCompany());
+    if (!game || !company) return;
+
+    const target = (company.products || []).find(p => p.id === modal.product.id);
+    if (!target) return;
+    if (target.innovation) return this.showToast('该产品正在创新研发中');
+
+    const fundWan = Number(modal.fund) || 0;
+    if (!Number.isInteger(fundWan) || fundWan < 100) {
+      return this.showToast('研发资金必须是 ≥100 的整数（万）');
+    }
+    if (fundWan * 10000 > Number(game.cash)) {
+      return this.showToast('公司现金不足');
+    }
+
+    const engineers = modal.engineers || [];
+    if (engineers.length === 0) return this.showToast('至少选择 1 名研发工程师');
+
+    for (const id of engineers) {
+      const emp = (company.employees || []).find(e => e.id === id);
+      if (!emp || emp.position !== '研发工程师') return this.showToast('只能选择研发工程师');
+      if (emp.status !== 'normal') return this.showToast(`${emp.name} 当前不可用`);
+    }
+
+    game.cash = round2(Number(game.cash) - fundWan * 10000);
+
+    engineers.forEach(id => {
+      const emp = (company.employees || []).find(e => e.id === id);
+      if (emp) emp.status = 'rnd';
+    });
+
+    const startDate = fmtDate(new Date(game.currentDate));
+    const endDate = new Date(game.currentDate);
+    endDate.setDate(endDate.getDate() + 7);
+
+    target.innovationFundTotal = round2((target.innovationFundTotal || 0) + fundWan);
+    target.innovation = {
+      engineers: [...engineers],
+      fund: fundWan,
+      startDate,
+      endDate: fmtDate(endDate),
+      status: 'rnd',
+    };
+
+    writeCompany(company);
+    writeGame(game);
+    this.innovModal = null;
+    this.refresh();
+    this.showToast(`「${target.name}」开始创新研发，预计 ${fmtDate(endDate)} 出结果`);
   },
 	productTypeChange(type) {
 
