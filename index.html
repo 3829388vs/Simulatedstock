@@ -1358,7 +1358,7 @@ restoreState(saved) {
         location.reload();
     },
     syncData() {
-      const hasGame    = SYNC_GAME_DATA != null;
+     const hasGame    = SYNC_GAME_DATA != null;
       const hasCompany = SYNC_COMPANY_DATA != null;
 
       if (!hasGame && !hasCompany) {
@@ -1367,44 +1367,62 @@ restoreState(saved) {
       }
 
       const parts = [];
-      if (hasGame)    parts.push('股票账户与行情（保留本机 stocks）');
+      if (hasGame)    parts.push('股票账户（保留本机 stocks）');
       if (hasCompany) parts.push('公司数据');
 
-      if (!confirm(`确定用代码里的数据覆盖本机的「${parts.join(' + ')}」吗？\n此操作会覆盖当前存档，不可撤销。`)) {
+      if (!confirm(`确定用代码里的数据覆盖本机「${parts.join(' + ')}」吗？\n此操作不可撤销。`)) {
         return;
       }
 
-      try {
-        if (hasGame) {
-          // 读本机现有 stocks，保留不动
-          let localStocks = [];
-          try {
-            const raw = localStorage.getItem('sim-stock-game-v1');
-            if (raw) {
-              const obj = JSON.parse(raw);
-              if (obj && Array.isArray(obj.stocks)) localStocks = obj.stocks;
-            }
-          } catch (e) { /* 本机无存档或解析失败，stocks 为空 */ }
-
-          // 用 SYNC_GAME_DATA 的其余字段 + 本机 stocks 组合
-          const merged = { ...SYNC_GAME_DATA, stocks: localStocks };
-          localStorage.setItem('sim-stock-game-v1', JSON.stringify(merged));
+      // ---------- 同步股票账户：逐字段赋值，stocks 保持本机 ----------
+      if (hasGame) {
+        const g = SYNC_GAME_DATA;
+        if (g.initialCash != null) this.initialCash = Number(g.initialCash);
+        if (g.cash != null)        this.cash = Number(g.cash);
+        if (g.positions && typeof g.positions === 'object') {
+          this.positions = JSON.parse(JSON.stringify(g.positions));
         }
+        if (g.currentDate != null) {
+          this.currentDate = new Date(Number(g.currentDate));
+        }
+        if (g.phase != null)        this.phase = g.phase === 'break' ? 'break' : 'trading';
+        if (g.remaining != null)    this.remaining = Number(g.remaining) || 0;
+        if (g.dayDuration != null)  this.dayDuration = Number(g.dayDuration) || 15;
+        if (g.breakDuration != null) this.breakDuration = Number(g.breakDuration) || 20;
+        if (g.marketEvent !== undefined) this.marketEvent = g.marketEvent || null;
+        if (g.stockProfit != null)  this.stockProfit = Number(g.stockProfit) || 0;
+        if (g.lastActiveAt != null) this.lastActiveAt = Number(g.lastActiveAt);
+        // 注意：不覆盖 this.stocks
+      }
 
-        if (hasCompany) {
+      // ---------- 同步公司数据：整体覆盖 ----------
+      if (hasCompany) {
+        try {
           localStorage.setItem('sim-stock-company-v1', JSON.stringify(SYNC_COMPANY_DATA));
+        } catch (e) {
+          console.error('[同步公司数据失败]', e);
+          this.showToast('公司数据同步失败：写入 localStorage 出错');
+          return;
         }
-      } catch (e) {
-        console.error('[同步失败]', e);
-        this.showToast('同步失败：写入 localStorage 出错，检查数据体积是否超限');
-        return;
       }
 
+      // ---------- 停掉旧定时器 ----------
       clearInterval(this._timer);
       clearInterval(this._saveTimer);
+      this._timer = null;
+      this._saveTimer = null;
 
-      this.showToast(`同步成功：${parts.join(' + ')}，正在重新加载…`);
-      setTimeout(() => location.reload(), 600);
+      // ---------- 用当前内存状态落盘，再重启时钟 ----------
+      this.saveState();
+
+      // 重建交易日时钟
+      this.phaseStart = Date.now();
+      const total = (this.phase === 'trading' ? this.dayDuration : this.breakDuration) * 1000;
+      this.phaseEnd = this.phaseStart + (this.phase === 'trading' ? this.dayDuration : this.breakDuration) * 1000;
+      this._timer = setInterval(() => this.tick(), 100);
+      this._saveTimer = setInterval(() => this.saveState(), 3000);
+
+      this.showToast(`同步成功：${parts.join(' + ')}`);
     },
     /* ==================== 交易 ==================== */
 
