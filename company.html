@@ -1431,9 +1431,15 @@
         </div>
         <button class="act" style="width:100%" @click="investAd">投入广告</button>
       </div>
-
+      <div style="margin-top:14px;border-top:1px solid #21262d;padding-top:12px">
+        <div class="row">
+          <span>售卖价格（与建造时长有关）</span>
+          <span class="up" style="font-weight:700">{{ fmtBig(propertySalePrice) }}</span>
+        </div>
+      </div>
       <div class="modal-actions" style="margin-top:16px">
-        <button class="act" @click="propertyDetail = null">关闭</button>
+        <button class="btn-ghost" @click="propertyDetail = null">关闭</button>
+        <button class="act sell" @click="sellProperty">售卖</button>
       </div>
     </div>
   </div>
@@ -3113,8 +3119,8 @@ const MARKET_ENVIRONMENTS = [
   },
   {
     id: 'shrink', name: '市场萎缩', color: '#3fd07c',
-    desc: '对外投资×75% · 置业×70% · 产品×70% · 子公司×85%',
-    project: 0.75, property: 0.7, product: 0.7, subsidiary: 0.85, finance: 1.0,
+    desc: '对外投资×75% · 置业×70% · 产品×70% · 子公司×70%',
+    project: 0.75, property: 0.7, product: 0.7, subsidiary: 0.7, finance: 1.0,
   },
   {
     id: 'stable', name: '市场平稳发展', color: '#9ca3af',
@@ -3123,8 +3129,8 @@ const MARKET_ENVIRONMENTS = [
   },
   {
     id: 'crisis', name: '金融危机到来', color: '#8b0000',
-    desc: '对外投资×60% · 置业×55% · 产品×50% · 子公司×65%',
-    project: 0.6, property: 0.55, product: 0.5, subsidiary: 0.65, finance: 1.0,
+    desc: '对外投资×35% · 置业×30% · 产品×40% · 子公司×25%',
+    project: 0.35, property: 0.3, product: 0.4, subsidiary: 0.25, finance: 1.0,
   },
   {
     id: 'real', name: '实体经济时代', color: '#d29922',
@@ -3152,9 +3158,9 @@ const MARKET_ENVIRONMENTS = [
   },
   {
     id: 'consume', name: '大消费时代', color: '#ff69b4',
-    desc: '消费类项目×160% · 消费类产品×150% · 金融放贷×300%',
+    desc: '消费类项目×140% · 消费类产品×150% · 金融放贷×300%',
     project: 1, property: 1, product: 1, subsidiary: 1, finance: 3,
-    projectBonus: { types: ['汽车', '食品', '商铺', '景区', '文旅', '电商'], mult: 1.6 },
+    projectBonus: { types: ['汽车', '食品', '商铺', '景区', '文旅', '电商'], mult: 1.4 },
     productBonus: {
       types: ['食品饮料', '玩具礼品', '服装', '家居用品', '包装', '酒', '电子产品', '美妆护肤', '奢侈品'],
       mult: 1.5,
@@ -4168,6 +4174,22 @@ createApp({
     propertyDetailRange() {
       if (!this.propertyDetail) return { min: 0, max: 0 };
       return calcPropertyWeeklyRange(this.propertyDetail);
+    },
+    propertySalePrice() {
+      if (!this.propertyDetail || !this.game) return 0;
+      const totalCost = Number(this.propertyDetail.totalCost) || 0;
+      const build = new Date(this.propertyDetail.buildDate);
+      const now = new Date(this.game.currentDate);
+      if (isNaN(build.getTime()) || isNaN(now.getTime())) return 0;
+
+      const months = Math.max(0,
+        (now.getFullYear() - build.getFullYear()) * 12 +
+        (now.getMonth() - build.getMonth())
+      );
+
+      const price = totalCost * 0.7 - totalCost * 0.01 * months;
+      const floor = 10000000;   // 最低 1000 万
+      return round2(Math.max(floor, price));
     },
     PROPERTY_PROVINCES() {
       return PROPERTY_PROVINCES;
@@ -6283,6 +6305,29 @@ createApp({
       openPropertyDetail(prop) {
         this.propertyDetail = prop;
         this.adInput = 0;
+      },
+      sellProperty() {
+        const prop = this.propertyDetail;
+        if (!prop) return;
+
+        const company = normalizeCompany(readCompany());
+        const game = readGame();
+        if (!company || !game) return;
+
+        const target = (company.properties || []).find(p => p.id === prop.id);
+        if (!target) return this.showToast('该置业资产不存在');
+
+        const price = this.propertySalePrice;
+        if (!confirm(`确定以 ${(price / 10000).toFixed(2)} 万元售卖「${target.name}」？`)) return;
+
+        game.cash = round2((Number(game.cash) || 0) + price);
+        company.properties = company.properties.filter(p => p.id !== target.id);
+
+        writeCompany(company);
+        writeGame(game);
+        this.propertyDetail = null;
+        this.refresh();
+        this.showToast(`已售卖「${target.name}」，获得 ${(price / 10000).toFixed(2)} 万元`);
       },
       investAd() {
         const prop = this.propertyDetail;
