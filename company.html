@@ -3244,24 +3244,24 @@ function calcPropertyWeeklyRange(prop) {
   let maxRandom = 0;
 
   if (type === '景区') {
-    minRandom = rand(landCost / 30, landCost / 20);
-    maxRandom = rand(landCost / 25, landCost / 18);
-  } else if (type === '商场') {
-    minRandom = rand(landCost / 35, landCost / 25);
+    minRandom = rand(landCost / 40, landCost / 26);
     maxRandom = rand(landCost / 28, landCost / 22);
+  } else if (type === '商场') {
+    minRandom = rand(landCost / 40, landCost / 28);
+    maxRandom = rand(landCost / 30, landCost / 25);
   } else if (type === '商业街') {
-    minRandom = rand(landCost / 38, landCost / 20);
-    maxRandom = rand(landCost / 30, landCost / 22);
+    minRandom = rand(landCost / 43, landCost / 28);
+    maxRandom = rand(landCost / 33, landCost / 25);
   }
   // 办公楼、地产开发：minRandom = maxRandom = 0
 
-  let min = 10000 + landCost / 20 + minRandom;
-  let max = 60000 + landCost / 15 + landCost / 20 + maxRandom;
+  let min = 30000 + landCost / 39 + minRandom;
+  let max = 90000 + landCost / 29 + maxRandom;
 
   // 广告投入：万元 → 元，min += 广告/21，max += 广告/11
   const adFeeYuan = (Number(prop.adFeeWan) || 0) * 10000;
-  min += adFeeYuan / 21;
-  max += adFeeYuan / 11;
+  min += adFeeYuan / 30;
+  max += adFeeYuan / 17;
 
   return { min, max };
 }
@@ -5077,12 +5077,12 @@ createApp({
               let net = gross - propertyTax - landUseTax;
 
               if (Math.random() < 0.30) {
-                net *= (1 - rand(0.3, 0.7));
+                net *= (1 - rand(0.5, 0.7));
               }
               net = round2(net);
 
               let cashAmount = net;
-              if (Math.random() < 0.25) {                                     // 25% 坏账
+              if (Math.random() < 0.29) {                                     // 25% 坏账
                 const badAmount = Math.round(net * rand(0.5, 0.7));
                 cashAmount = net - badAmount;
                 company.receivables.balance = round2((company.receivables.balance || 0) + badAmount);
