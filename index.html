@@ -807,6 +807,7 @@ createApp({
       stockProfit: 0,
       companyLoan: 0,
       lastActiveAt: null,
+      dayDuration: 15,   // 原来是 60
     };
   },
 
@@ -1049,7 +1050,8 @@ restoreState(saved) {
     this.stocks = restored;
   this.lastActiveAt = saved.lastActiveAt || null;
   this.currentDate = new Date(saved.currentDate || GAME_START_DATE.getTime());
-  this.dayDuration = saved.dayDuration || 60;
+  const savedDur = Number(saved.dayDuration);
+  this.dayDuration = savedDur === 60 ? 15 : (savedDur || 15);
   this.breakDuration = saved.breakDuration || 15;
   this.phase = saved.phase === 'break' ? 'break' : 'trading';
 
@@ -1159,29 +1161,54 @@ restoreState(saved) {
 
     /** 收盘：定格当日 K 线，更新连涨连跌状态，进入休息 */
     closeDay() {
-      this.stocks.forEach(s => {
-        const finalClose = s.targetClose;
-        s.price = finalClose;
+        this.stocks.forEach(s => {
+          const originalFinal = s.targetClose;
+          const originalPrev = s.prevClose;
+          // 涨跌幅必须用「归一化之前」的价格计算，否则除完再算会失真
+          const pct = (originalFinal - originalPrev) / originalPrev * 100;
 
-        const k = s.history[s.history.length - 1];
-        k.close = finalClose;
-        if (finalClose > k.high) k.high = finalClose;
-        if (finalClose < k.low)  k.low  = finalClose;
+          // ---------- 价格归一化 ----------
+          // 1000 ~ 100000：÷100；> 100000：÷1000；< 1000 不变
+          let divisor = 1;
+          if (originalFinal >= 1000 && originalFinal <= 100000) divisor = 100;
+          else if (originalFinal > 100000) divisor = 1000;
 
-        const pct = (finalClose - s.prevClose) / s.prevClose * 100;
+          let finalClose = originalFinal;
+          if (divisor > 1) {
+            finalClose = round2(originalFinal / divisor);
+            s.prevClose = round2(originalPrev / divisor);
+            s.limitUp = round2(s.limitUp / divisor);
+            s.limitDown = round2(s.limitDown / divisor);
 
-        if (pct > 0)      { s.upStreak++;   s.downStreak = 0; }
-        else if (pct < 0) { s.downStreak++; s.upStreak   = 0; }
-        else              { s.upStreak = 0; s.downStreak = 0; }
+            // 当前这根 K 线整体缩放，保持 open/close/high/low 自洽
+            const k = s.history[s.history.length - 1];
+            if (k) {
+              k.open = round2(k.open / divisor);
+              k.high = round2(k.high / divisor);
+              k.low = round2(k.low / divisor);
+            }
+          }
 
-        s.prevLimitUp  = pct >= 9.9;
-        s.prevBigGain  = pct >= 4 && pct <= 7;   // 大涨 4%~7%（涨停不算）
-      });
+          s.price = finalClose;
+          const k = s.history[s.history.length - 1];
+          if (k) {
+            k.close = finalClose;
+            if (finalClose > k.high) k.high = finalClose;
+            if (finalClose < k.low) k.low = finalClose;
+          }
 
-      this.phase = 'break';
-      this.phaseEnd = Date.now() + this.breakDuration * 1000;
-      this.remaining = this.breakDuration;
-      this.saveState()
+          // ---------- 连涨连跌 / 涨停状态用原始涨跌幅 ----------
+          if (pct > 0) { s.upStreak++; s.downStreak = 0; }
+          else if (pct < 0) { s.downStreak++; s.upStreak = 0; }
+          else { s.upStreak = 0; s.downStreak = 0; }
+          s.prevLimitUp = pct >= 9.9;
+          s.prevBigGain = pct >= 4 && pct <= 7;
+        });
+
+        this.phase = 'break';
+        this.phaseEnd = Date.now() + this.breakDuration * 1000;
+        this.remaining = this.breakDuration;
+        this.saveState();
     },
 
     /** 休息结束：进入下一交易日 */
