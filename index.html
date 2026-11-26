@@ -1031,8 +1031,21 @@ openExport() {
   const g = localStorage.getItem('sim-stock-game-v1');
   const c = localStorage.getItem('sim-stock-company-v1');
   let t = '';
-  if (g) t += 'const SYNC_GAME_DATA = ' + g + ';\n\n';
-  if (c) t += 'const SYNC_COMPANY_DATA = ' + c + ';\n';
+
+  if (g) {
+    try {
+      const obj = JSON.parse(g);
+      obj.stocks = [];                       // 导出时不带 stocks
+      t += 'const SYNC_GAME_DATA = ' + JSON.stringify(obj) + ';\n\n';
+    } catch (e) {
+      t += 'const SYNC_GAME_DATA = null; // 解析失败\n\n';
+    }
+  }
+
+  if (c) {
+    t += 'const SYNC_COMPANY_DATA = ' + c + ';\n';
+  }
+
   if (!t) t = '当前没有存档数据';
   this.exportText = t;
   this.showExport = true;
@@ -1351,7 +1364,7 @@ restoreState(saved) {
       }
 
       const parts = [];
-      if (hasGame)    parts.push('股票账户与行情');
+      if (hasGame)    parts.push('股票账户与行情（保留本机 stocks）');
       if (hasCompany) parts.push('公司数据');
 
       if (!confirm(`确定用代码里的数据覆盖本机的「${parts.join(' + ')}」吗？\n此操作会覆盖当前存档，不可撤销。`)) {
@@ -1360,8 +1373,21 @@ restoreState(saved) {
 
       try {
         if (hasGame) {
-          localStorage.setItem('sim-stock-game-v1', JSON.stringify(SYNC_GAME_DATA));
+          // 读本机现有 stocks，保留不动
+          let localStocks = [];
+          try {
+            const raw = localStorage.getItem('sim-stock-game-v1');
+            if (raw) {
+              const obj = JSON.parse(raw);
+              if (obj && Array.isArray(obj.stocks)) localStocks = obj.stocks;
+            }
+          } catch (e) { /* 本机无存档或解析失败，stocks 为空 */ }
+
+          // 用 SYNC_GAME_DATA 的其余字段 + 本机 stocks 组合
+          const merged = { ...SYNC_GAME_DATA, stocks: localStocks };
+          localStorage.setItem('sim-stock-game-v1', JSON.stringify(merged));
         }
+
         if (hasCompany) {
           localStorage.setItem('sim-stock-company-v1', JSON.stringify(SYNC_COMPANY_DATA));
         }
