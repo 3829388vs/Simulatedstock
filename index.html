@@ -1419,8 +1419,8 @@ restoreState(saved) {
       this.phaseStart = Date.now();
       const total = (this.phase === 'trading' ? this.dayDuration : this.breakDuration) * 1000;
       this.phaseEnd = this.phaseStart + (this.phase === 'trading' ? this.dayDuration : this.breakDuration) * 1000;
-      this._timer = setInterval(() => this.tick(), 100);
-      this._saveTimer = setInterval(() => this.saveState(), 3000);
+      this._timer = setInterval(() => this.tick(), 1000+Math.random()*350);
+      this._saveTimer = setInterval(() => this.saveState(), 5000);
 
       this.showToast(`同步成功：${parts.join(' + ')}`);
     },
