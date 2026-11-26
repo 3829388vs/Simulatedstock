@@ -300,7 +300,6 @@
   <!-- ============ 顶栏 ============ -->
   <header class="topbar">
     <div class="logo">📈 模拟炒股</div>
-    <button @click="resetGame" style="margin-left: 15px;">重置游戏</button>
     <a
       class="speed-btn"
       style="text-decoration:none;display:inline-flex;align-items:center;"
@@ -313,6 +312,9 @@
     </div>
 
     <div class="speed-area">
+      <button class="speed-btn" @click="openExport" style="margin-left:8px">导出数据</button>
+      <button class="speed-btn" @click="resetGame" style="margin-left:8px">重置游戏</button>
+      <button class="speed-btn" @click="syncData" style="margin-left:8px">同步数据</button>
       <span class="hint">交易日时长</span>
       <button v-for="d in [60,30,20,15]" :key="d"
               class="speed-btn" :class="{ active: dayDuration === d }"
@@ -480,6 +482,21 @@
         </div>
       </div>
     </section>
+    <div v-if="showExport" class="modal-mask" @click.self="showExport = false">
+      <div class="modal" style="max-width:560px">
+        <h3>导出数据</h3>
+        <div style="font-size:12px;color:#6e7681;margin-bottom:8px">
+          长按下方文本框全选复制，粘贴到另一台设备的代码里。
+        </div>
+        <textarea readonly :value="exportText"
+                  style="width:100%;height:40vh;background:#0d1117;border:1px solid #2b3444;color:#e6edf3;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:none"
+                  @focus="$event.target.select()"></textarea>
+        <div class="modal-actions">
+          <button class="btn-ghost" @click="showExport = false">关闭</button>
+          <button class="act" @click="copyExport">复制</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <transition name="fade">
@@ -561,7 +578,14 @@ const STOCK_SEED = [
   { code: '600019', name: '宝钢股份', price: 6.25 },
   { code: '600036', name: '招商银行', price: 43.40 }
 ];
-
+/* =========================================================
+ *  数据同步变量：把其他终端的存档 JSON 粘贴到这里
+ *  SYNC_GAME_DATA    → 对应 localStorage 的 sim-stock-game-v1
+ *  SYNC_COMPANY_DATA → 对应 localStorage 的 sim-stock-company-v1
+ *  保持 null 表示该 key 不同步；填了内容后点「同步数据」写入
+ * ========================================================= */
+const SYNC_GAME_DATA    = null;   // ← 粘贴 sim-stock-game-v1 的数据（对象，不是字符串）
+const SYNC_COMPANY_DATA = null;   // ← 粘贴 sim-stock-company-v1 的数据（对象，不是字符串）
 const GAME_START_DATE = new Date(2022, 2, 20); // 2022年3月20日
 /* =========================================================
  *  本地持久化（localStorage）
@@ -808,6 +832,8 @@ createApp({
       companyLoan: 0,
       lastActiveAt: null,
       dayDuration: 15,   // 原来是 60
+      exportText: '',
+      showExport: false,
     };
   },
 
@@ -1000,6 +1026,16 @@ checkCompany() {
     this.hasCompany = false;
     this.companyLoan = 0;
   }
+},
+openExport() {
+  const g = localStorage.getItem('sim-stock-game-v1');
+  const c = localStorage.getItem('sim-stock-company-v1');
+  let t = '';
+  if (g) t += 'const SYNC_GAME_DATA = ' + g + ';\n\n';
+  if (c) t += 'const SYNC_COMPANY_DATA = ' + c + ';\n';
+  if (!t) t = '当前没有存档数据';
+  this.exportText = t;
+  this.showExport = true;
 },
 restoreState(saved) {
   this.initialCash = saved.initialCash ?? 10000;
@@ -1218,6 +1254,18 @@ restoreState(saved) {
       this.currentDate = d;
       this.beginDay();
     },
+    copyExport() {
+      const ta = document.querySelector('.modal textarea');
+      if (!ta) return;
+      ta.select();
+      ta.setSelectionRange(0, 999999);
+      try {
+        document.execCommand('copy');
+        this.showToast('已复制，去另一台设备粘贴');
+      } catch (e) {
+        this.showToast('复制失败，请长按手动复制');
+      }
+    },
 
     /** 修改交易日时长 */
     setDayDuration(d) {
@@ -1292,6 +1340,42 @@ restoreState(saved) {
         localStorage.removeItem('sim-stock-company-v1');
         // 如果之前有定时器，先停掉再刷新
         location.reload();
+    },
+    syncData() {
+      const hasGame    = SYNC_GAME_DATA != null;
+      const hasCompany = SYNC_COMPANY_DATA != null;
+
+      if (!hasGame && !hasCompany) {
+        this.showToast('同步变量为空，请先在代码里填写 SYNC_GAME_DATA / SYNC_COMPANY_DATA');
+        return;
+      }
+
+      const parts = [];
+      if (hasGame)    parts.push('股票账户与行情');
+      if (hasCompany) parts.push('公司数据');
+
+      if (!confirm(`确定用代码里的数据覆盖本机的「${parts.join(' + ')}」吗？\n此操作会覆盖当前存档，不可撤销。`)) {
+        return;
+      }
+
+      try {
+        if (hasGame) {
+          localStorage.setItem('sim-stock-game-v1', JSON.stringify(SYNC_GAME_DATA));
+        }
+        if (hasCompany) {
+          localStorage.setItem('sim-stock-company-v1', JSON.stringify(SYNC_COMPANY_DATA));
+        }
+      } catch (e) {
+        console.error('[同步失败]', e);
+        this.showToast('同步失败：写入 localStorage 出错，检查数据体积是否超限');
+        return;
+      }
+
+      clearInterval(this._timer);
+      clearInterval(this._saveTimer);
+
+      this.showToast(`同步成功：${parts.join(' + ')}，正在重新加载…`);
+      setTimeout(() => location.reload(), 600);
     },
     /* ==================== 交易 ==================== */
 
