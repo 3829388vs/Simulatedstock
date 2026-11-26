@@ -3060,11 +3060,13 @@ const PROPERTY_CITY_PRICE = {
 const PROPERTY_DEFAULT_CITY_PRICE = 27610;
 
 const PROPERTY_TYPES = {
-  '办公楼':   { baseDays: 7,  buildPrice: 3620, color: '#1f6feb' },
-  '景区':     { baseDays: 15, buildPrice: 2256, color: '#3fd07c' },
-  '商场':     { baseDays: 13, buildPrice: 6913, color: '#ff69b4' },
-  '地产开发': { baseDays: 7,  buildPrice: 3306, color: '#a371f7' },
-  '商业街':   { baseDays: 10, buildPrice: 4775, color: '#f5484d' },
+  '办公楼':   { baseDays: 7,  buildPrice: 4720, color: '#1f6feb' },
+  '景区':     { baseDays: 15, buildPrice: 3256, color: '#3fd07c' },
+  '商场':     { baseDays: 13, buildPrice: 8313, color: '#ff69b4' },
+  '地产开发': { baseDays: 7,  buildPrice: 4506, color: '#a371f7' },
+  '商业街':   { baseDays: 10, buildPrice: 5975, color: '#f5484d' },
+  '厂房':   { baseDays: 10, buildPrice: 5095, color: '#b8b8b8' },
+  '园区':   { baseDays: 12, buildPrice: 5930, color: '#49f300' },
 };
 const PROPERTY_TYPE_LIST = Object.keys(PROPERTY_TYPES);
 const MANAGER_ROLE_DEFS = {
@@ -3119,8 +3121,8 @@ const MARKET_ENVIRONMENTS = [
   },
   {
     id: 'shrink', name: '市场萎缩', color: '#3fd07c',
-    desc: '对外投资×75% · 置业×70% · 产品×70% · 子公司×70%',
-    project: 0.75, property: 0.7, product: 0.7, subsidiary: 0.7, finance: 1.0,
+    desc: '对外投资×70% · 置业×65% · 产品×70% · 子公司×65%',
+    project: 0.7, property: 0.65, product: 0.7, subsidiary: 0.65, finance: 1.0,
   },
   {
     id: 'stable', name: '市场平稳发展', color: '#9ca3af',
@@ -3155,6 +3157,12 @@ const MARKET_ENVIRONMENTS = [
     desc: '地产/商铺项目×150% · 置业×150%',
     project: 1, property: 1.5, product: 1, subsidiary: 1, finance: 1.0,
     projectBonus: { types: ['地产', '商铺'], mult: 1.5 },
+  },
+  {
+    id: 'realestate', name: '地产寒冬', color: '#3fd07c',
+    desc: '地产/商铺项目×40% · 置业×33%',
+    project: 1, property: 0.4, product: 1, subsidiary: 1, finance: 1.0,
+    projectBonus: { types: ['地产', '商铺'], mult: 0.33 },
   },
   {
     id: 'consume', name: '大消费时代', color: '#ff69b4',
@@ -3229,7 +3237,72 @@ function calcProductWeeklyRange(prod) {
 function randomAdEffectV() {
   return round2(0.6 + Math.random() * 1.4);
 }
+/* =========================================================
+ *  环境盈利变量：每种产品类型 / 置业类型 / 子公司行业 一个指数
+ *  范围 0.5 ~ 1.35，每 2 个月重随机一次
+ * ========================================================= */
+const ENV_INDEX_MIN = 0.5;
+const ENV_INDEX_MAX = 1.35;
 
+function randomEnvIndex() {
+  return round2(ENV_INDEX_MIN + Math.random() * (ENV_INDEX_MAX - ENV_INDEX_MIN));
+}
+
+/** 补齐 envProfitIndex，按所有已知类型填随机值（lastGenMonth 保持 null 时由 refresh 触发首轮生成） */
+function ensureEnvProfitIndex(company) {
+  if (!company.envProfitIndex) {
+    company.envProfitIndex = { product: {}, property: {}, subsidiary: {}, lastGenMonth: null };
+  }
+  const e = company.envProfitIndex;
+  if (!e.product) e.product = {};
+  if (!e.property) e.property = {};
+  if (!e.subsidiary) e.subsidiary = {};
+  if (e.lastGenMonth === undefined) e.lastGenMonth = null;
+
+  Object.keys(PRODUCT_TYPE_INFO).forEach(t => {
+    if (e.product[t] == null) e.product[t] = randomEnvIndex();
+  });
+  Object.keys(PROPERTY_TYPES).forEach(t => {
+    if (e.property[t] == null) e.property[t] = randomEnvIndex();
+  });
+  (company.acquisitions || []).forEach(a => {
+    if (a.industry && e.subsidiary[a.industry] == null) {
+      e.subsidiary[a.industry] = randomEnvIndex();
+    }
+  });
+  return e;
+}
+
+/** 读取某类某 key 的环境盈利变量；不存在时返回 1 */
+function getEnvIndex(company, category, key) {
+  if (!company || !company.envProfitIndex) return 1;
+  const m = company.envProfitIndex[category];
+  if (!m || m[key] == null) return 1;
+  return Number(m[key]) || 1;
+}
+
+/** 是否需要重新随机（距上次生成 ≥2 个自然月，或从未生成） */
+function shouldRegenerateEnv(company, currentDate) {
+  if (!company.envProfitIndex) return true;
+  const last = company.envProfitIndex.lastGenMonth;
+  if (!last) return true;
+  const [ly, lm] = last.split('-').map(Number);
+  if (isNaN(ly) || isNaN(lm)) return true;
+  const lastM = ly * 12 + (lm - 1);
+  const currM = currentDate.getFullYear() * 12 + currentDate.getMonth();
+  return (currM - lastM) >= 2;
+}
+
+/** 全量重随机并记录生成月份 */
+function regenerateEnvIndex(company, currentDate) {
+  const e = ensureEnvProfitIndex(company);
+  Object.keys(PRODUCT_TYPE_INFO).forEach(t => { e.product[t] = randomEnvIndex(); });
+  Object.keys(PROPERTY_TYPES).forEach(t => { e.property[t] = randomEnvIndex(); });
+  (company.acquisitions || []).forEach(a => {
+    if (a.industry) e.subsidiary[a.industry] = randomEnvIndex();
+  });
+  e.lastGenMonth = fmtMonth(currentDate);
+}
 /**
  * 市场份额占比 = (投资金额 + 广告费 × v) / (1500 + n)
  * clamp 到 [0.05, 0.95]
@@ -3265,6 +3338,12 @@ function calcPropertyWeeklyRange(prop) {
   } else if (type === '商业街') {
     minRandom = rand(landCost / 43, landCost / 28);
     maxRandom = rand(landCost / 33, landCost / 25);
+  } else if (type === '厂房') {
+    minRandom = rand(landCost / 40, landCost / 28);
+    maxRandom = rand(landCost / 30, landCost / 23);
+  } else if (type === '园区') {
+    minRandom = rand(landCost / 39, landCost / 28);
+    maxRandom = rand(landCost / 31, landCost / 23);
   }
   // 办公楼、地产开发：minRandom = maxRandom = 0
 
@@ -3409,6 +3488,8 @@ const PROPERTY_IMAGE_POOL = {
   '商场':     ['https://q0.itc.cn/q_70/images03/20251210/450d87a8b53e4521b2246ab0c814f107.jpeg', 'https://pic.rmb.bdstatic.com/bjh/260810/dump/546cfa9c88dfe5a794feb2e07fd9a991.jpeg', 'https://ww3.sinaimg.cn/mw690/4fdb53a6ly1i1h3gxav6gj22c03404qs.jpg'],
   '地产开发': ['https://b0.bdstatic.com/5edb2916af700a87bbfd5e18b65402e1.jpg', 'https://miaobi-lite.bj.bcebos.com/miaobi/5mao/b%27LV8xNzMxODc2MzU0LjM4MDM2NF8xNzMxODc2MzU1LjMwNTI3Mzg%3D%27/1.png', 'https://img.zgsta.zhuge.com/normal/2Fnws-fAM2hC7CpvIv1IqCSqJhFXl'],
   '商业街':   ['https://miaobi-lite.bj.bcebos.com/miaobi/5mao/b%275Lic5Lqs6KGX5aS0XzE3MzU3NTA3MDIuNjI1NzgxXzE3MzU3NTA3MDMuNjM3Mjk1Mg%3D%3D%27/1.png', 'https://q4.itc.cn/images01/20251009/21ee57357f8c460696eea412d9896b4b.jpeg', 'https://gips1.baidu.com/it/u=3952787157,1659138533&fm=3074&app=3074&f=JPEG?w=1918&h=1186&type=normal&func=C'],
+  '厂房':   ['https://img1.baidu.com/it/u=2564532495,204320760&fm=253&app=138&f=JPEG?w=800&h=1067','https://img2.baidu.com/it/u=1707966463,1341541808&fm=253&fmt=auto&app=138&f=JPEG?w=750&h=500'],
+  '园区': ['https://img1.baidu.com/it/u=3888254491,3539107289&fm=253&fmt=auto&app=138&f=JPEG?w=889&h=500','https://bj.bcebos.com/bjh-pixel/17109803780252206931_0_ainote_new.jpg']
 };
 
 /* =========================================================
@@ -3716,6 +3797,7 @@ function normalizeCompany(company) {
   };
   company.employees.forEach(fix);
   company.talentMarket.forEach(fix);
+  ensureEnvProfitIndex(company);
   return company;
 }
 function readCompany() {
@@ -4780,6 +4862,11 @@ createApp({
           // 环境变更优先于所有结算：先切换环境，同一天的结算用新环境
           if (!this._skipEnvChange) {
             if (this.checkMarketEnvChange(company, game)) { companyDirty = true; }
+            if (shouldRegenerateEnv(company, new Date(game.currentDate))) {
+              regenerateEnvIndex(company, new Date(game.currentDate));
+              this._pendingNotices.push('环境盈利变量已更新，各类经营方向收益发生变化');
+              companyDirty = true;
+            }
           }
 
           if (this.accrueInterest(company, game))        companyDirty = true;
@@ -5104,7 +5191,8 @@ createApp({
           while (dayDiff(lastSettle, currentDate) >= 7) {
               const range = calcPropertyWeeklyRange(prop);
               const envMult = getMarketMultiplier(company, 'property', prop.type);
-              const gross = rand(range.min, range.max) * envMult;
+			  const envIdx = getEnvIndex(company, 'property', prop.type);
+			  const gross = rand(range.min, range.max) * envMult * envIdx;
 
               const propertyTax = gross * 0.12;
               const landUseTax = (Number(prop.area) || 0) * 22;
@@ -5228,7 +5316,8 @@ createApp({
             const range = calcProductWeeklyRange(prod);
             const prodMult = getMarketMultiplier(company, 'product', prod.type);
             const share = Number(prod.marketShare) || 0;
-            let amount = rand(range.min, range.max) * prodMult * (share+0.3);
+			const envIdx = getEnvIndex(company, 'product', prod.type);
+			let amount = rand(range.min, range.max) * prodMult * (share+0.3) * envIdx;
 			//招募销售和生产工，产品收益增加
 			let staffnum = 0
 			prod.assignedEmployees.forEach(e => {
@@ -5440,8 +5529,10 @@ createApp({
             if (minWan > maxWan) { const t = minWan; minWan = maxWan; maxWan = t; }
 
             let income = rand(minWan, maxWan);
-            if (Math.random() < 0.3) income *= 0.4;   // 困难期
+            if (Math.random() < 0.3) income *= 0.25;   // 困难期
+			if (Math.random() >= 0.3 && Math.random() < 0.4) income *= 0.7;   // 萎缩期
             income *= getMarketMultiplier(company, 'subsidiary', null);
+			income *= getEnvIndex(company, 'subsidiary', sub.industry); 
 			if (sub.ceoId)       income *= 1.2;   // CEO 加成 +20%
 			if (sub.secretaryId) income *= 1.06;   // 秘书加成 +6%
 			// 借调员工营业额加成：每人 +Math.round(salary/5000)%
@@ -5449,7 +5540,7 @@ createApp({
 			  let bonusPct = 0;
 			  sub.assignedEmployees.forEach(id => {
 			    const emp = (company.employees || []).find(e => e.id === id);
-			    if (emp && emp.salary) bonusPct += Math.round(emp.salary / 5000);
+			    if (emp && emp.salary) bonusPct += Math.round(emp.salary / 8000);
 			  });
 			  if (bonusPct > 0) income *= (1 + bonusPct / 100);
 			}
@@ -5487,7 +5578,7 @@ createApp({
             const perSalaryWan = 1 + (sub.initialTotalAssets || 0) * 0.002;
             const salaryWan = round2(empCount * perSalaryWan);
             //子公司营业成本
-            const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.18));
+            const opCostWan = round2((sub.averNetProfit || 0) * rand(0.1, 0.2));
             const costWan = round2(salaryWan + opCostWan);
            const profitWan = round2(revenue - costWan);
             const rate = Math.min(1, Math.max(0, Number(sub.dividendRate) || 0));
@@ -6094,6 +6185,12 @@ createApp({
               endDate: fmtDate(next),
             };
           })(),
+		  envProfitIndex: (() => {
+		    const e = { product: {}, property: {}, subsidiary: {}, lastGenMonth: null };
+		    Object.keys(PRODUCT_TYPE_INFO).forEach(t => { e.product[t] = randomEnvIndex(); });
+		    Object.keys(PROPERTY_TYPES).forEach(t => { e.property[t] = randomEnvIndex(); });
+		    return e;
+		  })(),
         };
 
         writeCompany(company);
