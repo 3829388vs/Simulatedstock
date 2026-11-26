@@ -1781,7 +1781,7 @@
 	        <span>{{ e.name }}</span>
 	        <span style="font-size:12px;color:#8b949e">{{ e.position }}</span>
 	        <span style="margin-left:auto;font-size:12px;color:#6e7681">
-	          +{{ Math.round(e.salary / 5000) }}%
+	          +{{ Math.round(e.salary / 8000) }}%
 	        </span>
 	      </label>
 	      <div v-if="availableSubEmployees.length === 0" class="empty" style="padding:16px 0">
@@ -3167,7 +3167,14 @@ const MARKET_ENVIRONMENTS = [
     },
   },
 ];
-
+/** 报表只保留最近 N 个月（默认 36 = 3 年），按 month 升序排序后裁剪 */
+const REPORT_KEEP_MONTHS = 36;
+function trimReports(reports, keep = REPORT_KEEP_MONTHS) {
+  if (!Array.isArray(reports)) return [];
+  if (reports.length <= keep) return reports;
+  const sorted = [...reports].sort((a, b) => (a.month || '').localeCompare(b.month || ''));
+  return sorted.slice(-keep);
+}
 function getRandomMarketEnv() {
   return MARKET_ENVIRONMENTS[Math.floor(Math.random() * MARKET_ENVIRONMENTS.length)];
 }
@@ -3575,6 +3582,8 @@ function normalizeCompany(company) {
     if (a.lastWeekSettleDate == null) a.lastWeekSettleDate = a.acquiredAt || null;
     if (a.lastMonthSettleDate == null) a.lastMonthSettleDate = a.acquiredAt || null;
     if (!Array.isArray(a.reports)) a.reports = [];
+    a.reports = trimReports(a.reports);
+
 	if (a.ceoId == null) a.ceoId = null;
 	if (a.secretaryId == null) a.secretaryId = null;
     if (a.monthRevenueWan == null) a.monthRevenueWan = 0;
@@ -3618,6 +3627,9 @@ function normalizeCompany(company) {
 	});
   if (!company.finance.teamBuildByMonth) company.finance.teamBuildByMonth = {};
   if (!company.finance.perfByMonth) company.finance.perfByMonth = {};
+  if (company.finance && Array.isArray(company.finance.reports)) {
+    company.finance.reports = trimReports(company.finance.reports);
+  }
   if (!company.lastTeamBuildMonth) company.lastTeamBuildMonth = '';
   if (!company.perfConfig) company.perfConfig = { ratio: 0.06, months: 6 };
   if (!company.nextPerfDate) {
@@ -4444,7 +4456,7 @@ createApp({
 	  let pct = 0;
 	  (this.subsidiaryDetail.assignedEmployees || []).forEach(id => {
 	    const emp = (this.company?.employees || []).find(e => e.id === id);
-	    if (emp && emp.salary) pct += Math.round(emp.salary / 5000);
+	    if (emp && emp.salary) pct += Math.round(emp.salary / 8000);
 	  });
 	  return pct;
 	},
@@ -5502,6 +5514,7 @@ createApp({
 
             sub.monthRevenueWan = 0;
             lastMonth = nextMonthStart;
+            sub.reports = trimReports(sub.reports);
             sub.lastMonthSettleDate = fmtDate(lastMonth);
             changed = true;
           }
@@ -5736,7 +5749,7 @@ createApp({
           receivables,
           detail: { salary: round2(salary + perf), perf, rent, utilities, travel, teamBuild, headcount },
         });
-
+        fin.reports = trimReports(fin.reports);
         fin.lastMonth = fmtMonth(nextMonthStart);
         changed = true;
       }
@@ -7276,7 +7289,7 @@ createApp({
 	  writeCompany(company);
 	  this.refresh();
 	  this.subsidiaryDetail = (company.acquisitions || []).find(a => a.id === sub.id);
-	  this.showToast(secId ? '已分配秘书，周收益 +2%' : '已取消秘书分配');
+	  this.showToast(secId ? '已分配秘书，周收益 +6%' : '已取消秘书分配');
 	},
 	toggleSubEmployee(empId) {
 	  if (!this.subsidiaryDetail) return;
