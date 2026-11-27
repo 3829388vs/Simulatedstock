@@ -1439,7 +1439,6 @@
         <div class="row"><span>当前月租金</span><span>{{ propertyDetail.monthlyRent }} 元 / 户</span></div>
         <div class="row"><span>月租金上限</span><span>{{ propertyDetailMaxRent }} 元 / 户</span></div>
         <div class="row" v-if="propertyDetail.status !== '建设中'"><span>当前租户 / 最大租户</span><span>{{ propertyDetailTenantCount }} / {{ propertyDetailMaxTenants }}</span></div>
-        <div class="row"><span>周租金收入</span><span class="up">{{ fmtBig(propertyDetailTenantCount * propertyDetail.monthlyRent / 4) }}</span></div>
       </template>
 
       <template v-if="propertyDetailMode === 'sale'">
@@ -3202,9 +3201,9 @@ const MARKET_ENVIRONMENTS = [
   },
   {
     id: 'realestate', name: '地产寒冬', color: '#3fd07c',
-    desc: '地产/商铺项目×40% · 置业×33%',
+    desc: '地产/商铺项目×40% · 置业×40%',
     project: 1, property: 0.4, product: 1, subsidiary: 1, finance: 1.0,
-    projectBonus: { types: ['地产', '商铺'], mult: 0.33 },
+    projectBonus: { types: ['地产', '商铺'], mult: 0.4 },
   },
   {
     id: 'consume', name: '大消费时代', color: '#ff69b4',
@@ -3280,7 +3279,7 @@ function randomAdEffectV() {
   return round2(0.6 + Math.random() * 1.4);
 }
 /* =========================================================
- *  环境盈利变量：每种产品类型  / 子公司行业 一个指数
+ *  环境盈利变量：每种产品类型 / 子公司行业 一个指数
  *  范围 0.25 ~ 1.35，每 2 个月重随机一次
  * ========================================================= */
 const ENV_INDEX_MIN = 0.25;
@@ -4596,7 +4595,7 @@ createApp({
     noticeVisible() { return this.noticeList.length > 0; },
     canOpenMeeting() {
       if (!this.game) return false;
-      return new Date(this.game.currentDate).getDate() === 1;
+      return new Date(this.game.currentDate).getDate() === 1 || new Date(this.game.currentDate).getDate() === 15;
     },
     projectTypes() {
       return Array.from(new Set(this.projectList.map(p => p.type)));
@@ -5130,7 +5129,6 @@ createApp({
             if (this.checkMarketEnvChange(company, game)) { companyDirty = true; }
             if (shouldRegenerateEnv(company, new Date(game.currentDate))) {
               regenerateEnvIndex(company, new Date(game.currentDate));
-              this._pendingNotices.push('环境盈利变量已更新，各类经营方向收益发生变化');
               companyDirty = true;
             }
           }
@@ -5465,20 +5463,20 @@ createApp({
                 const envIdx = getEnvIndex(company, 'property', prop.type);
                 gross = rand(range.min, range.max) * envMult * envIdx;
               } else if (mode === 'rent') {
-                gross = ((prop.tenants || []).length * (Number(prop.monthlyRent) || 0)) / 4 * envMult;
+                gross = ((prop.tenants || []).length * (Number(prop.monthlyRent) || 0)) / 4;
               } else if (mode === 'sale') {
-                gross = (Number(prop.monthlyRevenue) || 0) / 4 * envMult;
+                gross = (Number(prop.monthlyRevenue) || 0) / 4;
               }
 
               const propertyTax = gross * 0.12;
               const landUseTax = (Number(prop.area) || 0) * 22;
               let net = gross - propertyTax - landUseTax;
 
-              if (Math.random() < 0.30) net *= (1 - rand(0.3, 0.7));
+              // if (Math.random() < 0.30) net *= (1 - rand(0.3, 0.7));
               net = round2(net);
 
               let cashAmount = net;
-              if (Math.random() < 0.25) {
+              if (Math.random() < 0.2) {
                 const badAmount = Math.round(net * rand(0.5, 0.7));
                 cashAmount = net - badAmount;
                 company.receivables.balance = round2((company.receivables.balance || 0) + badAmount);
