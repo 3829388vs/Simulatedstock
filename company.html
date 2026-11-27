@@ -892,14 +892,14 @@
             <div class="property-meta">总投资：{{ fmtBig(p.totalCost) }}</div>
             <div class="property-meta">本周营业收入：<span :class="pnlClass(p.weeklyIncome)">{{ fmtBigSigned(p.weeklyIncome) }}</span></div>
             <div class="property-meta">总营业收入：<span :class="pnlClass(p.totalIncome)">{{ fmtBigSigned(p.totalIncome) }}</span></div>
-            <div class="property-status" :class="'status-' + (p.status === '建设中' ? 'building' : p.status === '盈利中' ? 'profit' : 'loss')">
-              {{ p.status }}
-            </div>
-            <div class="property-meta" v-if="p.rentMode === 'rent'">
+            <div class="property-meta" v-if="p.rentMode === 'rent' && p.status !== '建设中'">
               租户：{{ (p.tenants || []).length }} / {{ Math.floor((p.area || 0) / (PROPERTY_RENT_MODES[p.type]?.areaPerTenant || 1)) }}
             </div>
-            <div class="property-meta" v-if="p.rentMode === 'sale'">
+            <div class="property-meta" v-if="p.rentMode === 'sale' && p.status !== '建设中'">
               购房者：{{ p.buyersCount || 0 }} 户
+            </div>
+            <div class="property-status" :class="'status-' + (p.status === '建设中' ? 'building' : p.status === '盈利中' ? 'profit' : 'loss')">
+              {{ p.status }}
             </div>
           </div>
         </div>
@@ -1438,7 +1438,7 @@
       <template v-if="propertyDetailMode === 'rent'">
         <div class="row"><span>当前月租金</span><span>{{ propertyDetail.monthlyRent }} 元 / 户</span></div>
         <div class="row"><span>月租金上限</span><span>{{ propertyDetailMaxRent }} 元 / 户</span></div>
-        <div class="row"><span>当前租户 / 最大租户</span><span>{{ propertyDetailTenantCount }} / {{ propertyDetailMaxTenants }}</span></div>
+        <div class="row" v-if="propertyDetail.status !== '建设中'"><span>当前租户 / 最大租户</span><span>{{ propertyDetailTenantCount }} / {{ propertyDetailMaxTenants }}</span></div>
         <div class="row"><span>周租金收入</span><span class="up">{{ fmtBig(propertyDetailTenantCount * propertyDetail.monthlyRent / 4) }}</span></div>
       </template>
 
@@ -3572,16 +3572,123 @@ function calcMaxTenants(prop) {
 function calcInitialTenants(prop) {
   const info = PROPERTY_RENT_MODES[prop.type];
   if (!info || info.mode !== 'rent') return 0;
-  const land = Number(prop.landUnitPrice) || 0;
+
+  const maxT = calcMaxTenants(prop);
+  const fair = calcFairRent(prop);
   const rent = Number(prop.monthlyRent) || 0;
-  const raw = Math.round(land / 2000 - rent / info.initDiv);
-  return Math.min(calcMaxTenants(prop), Math.max(info.minInit, raw));
+
+  if (fair <= 0 || rent <= 0 || maxT <= 0) {
+    return Math.max(info.minInit, 0);
+  }
+
+  const premium = rent / fair;
+  const rate = calcInitialOccupancyRate(premium);
+  const init = Math.round(maxT * rate);
+  return Math.min(maxT, Math.max(info.minInit, init));
 }
 
 function calcInitialBuyers(prop) {
-  const land = Number(prop.landUnitPrice) || 0;
+  const totalUnits = Math.floor((Number(prop.area) || 0) / 100);
+  const fair = calcFairPrice(prop);
   const price = Number(prop.buildingPrice) || 0;
-  return Math.max(5, Math.round(land / 1000 - price / 1400));
+
+  if (fair <= 0 || price <= 0 || totalUnits <= 0) return 5;
+
+  const premium = price / fair;
+  const rate = calcInitialOccupancyRate(premium);
+  const init = Math.round(totalUnits * rate);
+  return Math.min(totalUnits, Math.max(5, init));
+}
+/* =========================================================
+ *  置业经济模型（商业地产 / 住宅地产）
+ * ========================================================= */
+
+/** 市场公允租金：商业街上限×0.75、办公楼上限×0.80、商场上限×0.75 */
+function calcFairRent(prop) {
+  const info = PROPERTY_RENT_MODES[prop.type];
+  if (!info || info.mode !== 'rent') return 0;
+  const coeff = prop.type === '办公楼' ? 0.80 : 0.75;
+  return Math.floor(calcMaxRent(prop) * coeff);
+}
+
+/** 市场公允房价：地价单价 × 1.8 */
+function calcFairPrice(prop) {
+  return Math.floor((Number(prop.landUnitPrice) || 0) * 1.8);
+}
+
+/** 地段热度：地价 / 100000，clamp 到 0.2 ~ 1.2 */
+function calcLocationHeat(prop) {
+  const land = Number(prop.landUnitPrice) || 0;
+  return Math.min(1.2, Math.max(0.2, land / 100000));
+}
+
+/** 按溢价率分档的初始出租率 / 去化率 */
+function calcInitialOccupancyRate(premium) {
+  if (premium <= 0.8)  return rand(0.70, 0.85);
+  if (premium <= 1.0)  return rand(0.55, 0.70);
+  if (premium <= 1.2)  return rand(0.35, 0.55);
+  return rand(0.15, 0.35);
+}
+
+/** 月新增租户：空置×5% × 热度 × 价格吸引力，寒冬 ×0.3，地产时代 +3 */
+function calcMonthlyNewTenants(prop, winter, eraBonus) {
+  const maxT = calcMaxTenants(prop);
+  const cur = (prop.tenants || []).length;
+  const vacant = Math.max(0, maxT - cur);
+  if (vacant <= 0) return 0;
+
+  const heat = calcLocationHeat(prop);
+  const fair = calcFairRent(prop);
+  const rent = Number(prop.monthlyRent) || 0;
+  const attract = (fair > 0 && rent > 0)
+    ? Math.min(1.5, Math.max(0.5, fair / rent))
+    : 1;
+
+  let add = Math.round(vacant * 0.05 * heat * attract);
+  if (winter) add = Math.round(add * 0.3);
+  add += eraBonus;
+  return Math.min(vacant, Math.max(0, add));
+}
+
+/** 月新增购房者：剩余×8% × 热度 × 价格吸引力，寒冬 ×0.25，地产时代 +3 */
+function calcMonthlyNewBuyers(prop, winter, eraBonus) {
+  const totalUnits = Math.floor((Number(prop.area) || 0) / 100);
+  const sold = Number(prop.buyersCount) || 0;
+  const remaining = Math.max(0, totalUnits - sold);
+  if (remaining <= 0) return 0;
+
+  const heat = calcLocationHeat(prop);
+  const fair = calcFairPrice(prop);
+  const price = Number(prop.buildingPrice) || 0;
+  const attract = (fair > 0 && price > 0)
+    ? Math.min(1.5, Math.max(0.5, fair / price))
+    : 1;
+
+  let add = Math.round(remaining * 0.08 * heat * attract);
+  if (winter) add = Math.round(add * 0.25);
+  add += eraBonus;
+  return Math.min(remaining, Math.max(0, add));
+}
+
+/** 涨价流失：流失率 = min(40%, 1.5 × 涨幅比例) */
+function calcRentIncreaseLoss(cur, oldRent, newRent) {
+  if (cur <= 0 || oldRent <= 0 || newRent <= oldRent) return 0;
+  const ratio = (newRent - oldRent) / oldRent;
+  const lossRate = Math.min(0.40, 1.5 * ratio);
+  return Math.min(cur, Math.round(cur * lossRate));
+}
+
+/** 降价新增：新增率 = min(25%, 1.2 × 降幅 × (0.3 + 空置率)) */
+function calcRentDecreaseAdd(prop, oldRent, newRent) {
+  const cur = (prop.tenants || []).length;
+  const maxT = calcMaxTenants(prop);
+  const vacant = Math.max(0, maxT - cur);
+  if (cur <= 0 || oldRent <= 0 || newRent >= oldRent || vacant <= 0) return 0;
+
+  const ratio = (oldRent - newRent) / oldRent;
+  const vacancyRate = maxT > 0 ? vacant / maxT : 0;
+  const addRate = Math.min(0.25, 1.2 * ratio * (0.3 + vacancyRate));
+  return Math.min(vacant, Math.round(cur * addRate));
 }
 
 function makeTenant(prop, startMonth) {
@@ -3775,6 +3882,7 @@ function normalizeCompany(company) {
       if (p.buyersCount == null) p.buyersCount = calcInitialBuyers(p);
       if (p.monthlyBuyers == null) p.monthlyBuyers = 0;
       if (p.monthlyRevenue == null) p.monthlyRevenue = 0;
+      if (p.firstMonthSettled == null) p.firstMonthSettled = true;   // 旧存档视为已过首月
     }
     if (p.lastMonthSettle == null) {
       p.lastMonthSettle = p.buildDate ? p.buildDate.slice(0, 7) : fmtMonth(new Date());
@@ -5400,29 +5508,27 @@ createApp({
             prop.tenants = (prop.tenants || []).filter(t => t.endMonth >= currentMonth);
             if (prop.tenants.length !== before) changed = true;
 
-            // 2. 新增租户
-            let add = 0;
-            if (!winter && prop.tenants.length > 0) {
-              add = randInt(0, Math.floor(prop.tenants.length * 0.1));
-            }
-            add += eraBonus;
-            const maxT = calcMaxTenants(prop);
-            const canAdd = Math.min(add, maxT - prop.tenants.length);
-            for (let i = 0; i < canAdd; i++) {
+            // 2. 新增租户：空置×5% × 热度 × 价格吸引力
+            const add = calcMonthlyNewTenants(prop, winter, eraBonus);
+            for (let i = 0; i < add; i++) {
               prop.tenants.push(makeTenant(prop, currentMonth));
             }
-            if (canAdd > 0) changed = true;
+            if (add > 0) changed = true;
 
           } else if (mode === 'sale') {
-            const land = Number(prop.landUnitPrice) || 0;
             const price = Number(prop.buildingPrice) || 0;
-            let maxNew = Math.max(0, Math.round(land / 9000 - price / 10000));
-            let add = winter ? 0 : randInt(0, maxNew);
-            add += eraBonus;
+            const add = calcMonthlyNewBuyers(prop, winter, eraBonus);
 
-            prop.monthlyBuyers = add;
-            prop.buyersCount = (prop.buyersCount || 0) + add;
-            prop.monthlyRevenue = round2(add * price * 100);
+            if (!prop.firstMonthSettled) {
+              prop.monthlyBuyers = (prop.monthlyBuyers || 0) + add;
+              prop.buyersCount  = (prop.buyersCount || 0) + add;
+              prop.monthlyRevenue = round2((prop.monthlyRevenue || 0) + add * price * 100);
+              prop.firstMonthSettled = true;
+            } else {
+              prop.monthlyBuyers = add;
+              prop.buyersCount  = (prop.buyersCount || 0) + add;
+              prop.monthlyRevenue = round2(add * price * 100);
+            }
             changed = true;
           }
 
@@ -6650,6 +6756,9 @@ createApp({
           for (let i = 0; i < n; i++) propRef.tenants.push(makeTenant(propRef, m));
         } else if (mode === 'sale') {
           propRef.buyersCount = calcInitialBuyers(propRef);
+          propRef.monthlyBuyers = propRef.buyersCount;                              // 初始购房者视为首月新增
+          propRef.monthlyRevenue = round2(propRef.buyersCount * (propRef.buildingPrice || 0) * 100);
+          propRef.firstMonthSettled = false;
         }
         writeCompany(company);
         writeGame(game);
@@ -6713,18 +6822,24 @@ createApp({
           const currentMonth = fmtMonth(new Date(game.currentDate));
 
           if (mode === 'rent') {
-            const add = randInt(0, Math.floor(wan / 100));
+            const heat = calcLocationHeat(target);
             const maxT = calcMaxTenants(target);
-            const canAdd = Math.min(add, maxT - (target.tenants || []).length);
-            for (let i = 0; i < canAdd; i++) target.tenants.push(makeTenant(target, currentMonth));
-            this.showToast(`投入广告 ${wan} 万元，新增 ${canAdd} 个租户`);
+            const vacant = Math.max(0, maxT - (target.tenants || []).length);
+            let add = Math.round(wan * 0.5 * heat);
+            add = Math.min(vacant, Math.max(0, add));
+            for (let i = 0; i < add; i++) target.tenants.push(makeTenant(target, currentMonth));
+            this.showToast(`投入广告 ${wan} 万元，新增 ${add} 个租户`);
           } else if (mode === 'sale') {
-            const add = randInt(0, Math.floor(wan / 150));
-            target.buyersCount = (target.buyersCount || 0) + add;
-            target.monthlyBuyers = (target.monthlyBuyers || 0) + add;
-            target.monthlyRevenue = round2((target.monthlyRevenue || 0) + add * (target.buildingPrice || 0) * 100);
-            this.showToast(`投入广告 ${wan} 万元，新增 ${add} 位购房者`);
-          }
+              const heat = calcLocationHeat(target);
+              const totalUnits = Math.floor((Number(target.area) || 0) / 100);
+              const remaining = Math.max(0, totalUnits - (Number(target.buyersCount) || 0));
+              let add = Math.round(wan * 0.3 * heat);
+              add = Math.min(remaining, Math.max(0, add));
+              target.buyersCount = (target.buyersCount || 0) + add;
+              target.monthlyBuyers = (target.monthlyBuyers || 0) + add;
+              target.monthlyRevenue = round2((target.monthlyRevenue || 0) + add * (target.buildingPrice || 0) * 100);
+              this.showToast(`投入广告 ${wan} 万元，新增 ${add} 位购房者`);
+            }
 
           writeCompany(company);
           writeGame(game);
@@ -6755,18 +6870,16 @@ createApp({
           const maxT = calcMaxTenants(target);
 
           if (newRent > oldRent) {
-            const reduce = randInt(1, Math.max(1, Math.floor(cur * 0.2)));
-            const actual = Math.min(reduce, cur);
-            for (let i = 0; i < actual; i++) {
+            const loss = calcRentIncreaseLoss(cur, oldRent, newRent);
+            for (let i = 0; i < loss; i++) {
               const idx = Math.floor(Math.random() * target.tenants.length);
               target.tenants.splice(idx, 1);
             }
-            this.showToast(`月租金上调至 ${newRent} 元，减少 ${actual} 个租户`);
+            this.showToast(`月租金上调至 ${newRent} 元，减少 ${loss} 个租户`);
           } else {
-            const add = randInt(2, Math.max(2, Math.floor(cur * 0.1)));
-            const canAdd = Math.min(add, maxT - cur);
-            for (let i = 0; i < canAdd; i++) target.tenants.push(makeTenant(target, currentMonth));
-            this.showToast(`月租金下调至 ${newRent} 元，新增 ${canAdd} 个租户`);
+            const add = calcRentDecreaseAdd(target, oldRent, newRent);
+            for (let i = 0; i < add; i++) target.tenants.push(makeTenant(target, currentMonth));
+            this.showToast(`月租金下调至 ${newRent} 元，新增 ${add} 个租户`);
           }
 
           target.monthlyRent = newRent;
